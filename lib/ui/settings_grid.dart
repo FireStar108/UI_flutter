@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'grid_background.dart';
+import '../core/grid_models.dart';
 
 class GridTemplate {
   final String id;
@@ -89,7 +89,7 @@ class _SettingsGridState extends State<SettingsGrid> {
           Expanded(
             flex: 1,
             child: Container(
-              color: Colors.black.withOpacity(0.2),
+              color: Colors.black.withValues(alpha: 0.2),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -132,7 +132,7 @@ class _SettingsGridState extends State<SettingsGrid> {
         border: Border.all(color: Colors.white10),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.5),
+            color: Colors.black.withValues(alpha: 0.5),
             blurRadius: 20,
             offset: const Offset(0, 10),
           ),
@@ -285,10 +285,10 @@ class _SettingsGridState extends State<SettingsGrid> {
         margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: isSelected ? Colors.orangeAccent.withOpacity(0.1) : Colors.transparent,
+          color: isSelected ? Colors.orangeAccent.withValues(alpha: 0.1) : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
-            color: isSelected ? Colors.orangeAccent.withOpacity(0.5) : Colors.transparent,
+            color: isSelected ? Colors.orangeAccent.withValues(alpha: 0.5) : Colors.transparent,
           ),
         ),
         child: Column(
@@ -335,7 +335,7 @@ class GridPreviewPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = Colors.white.withOpacity(0.1)
+      ..color = Colors.white.withValues(alpha: 0.1)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1;
 

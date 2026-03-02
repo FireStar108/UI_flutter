@@ -224,7 +224,7 @@ class _AppState extends State<App> {
                       icon: Icon(_isSettingsPanelVisible ? Icons.close : Icons.settings),
                       label: const Text('Настройки'),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: _isSettingsPanelVisible ? Colors.redAccent.withOpacity(0.2) : Colors.white10,
+                        backgroundColor: _isSettingsPanelVisible ? Colors.redAccent.withValues(alpha: 0.2) : Colors.white10,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                       ),
@@ -235,7 +235,7 @@ class _AppState extends State<App> {
                       icon: Icon(_isAddPanelVisible ? Icons.close : Icons.add),
                       label: const Text('Добавить окно'),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: _isAddPanelVisible ? Colors.redAccent.withOpacity(0.2) : Colors.white10,
+                        backgroundColor: _isAddPanelVisible ? Colors.redAccent.withValues(alpha: 0.2) : Colors.white10,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                       ),
@@ -265,8 +265,8 @@ class _AppState extends State<App> {
                                     width: _previewSize!.width * workAreaSize.width,
                                     height: _previewSize!.height * workAreaSize.height,
                                     decoration: BoxDecoration(
-                                      color: Colors.blueAccent.withOpacity(0.15),
-                                      border: Border.all(color: Colors.blueAccent.withOpacity(0.5), width: 2),
+                                      color: Colors.blueAccent.withValues(alpha: 0.15),
+                                      border: Border.all(color: Colors.blueAccent.withValues(alpha: 0.5), width: 2),
                                     ),
                                   ),
                                 ),

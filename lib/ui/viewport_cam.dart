@@ -9,7 +9,7 @@ class ViewportCam extends StatefulWidget {
 }
 
 class _ViewportCamState extends State<ViewportCam> {
-  CameraMacOSController? _controller;
+  // CameraMacOSController? _controller; // Убрано, так как не используется
   List<CameraMacOSDevice> _cameras = [];
   bool _isInitialized = false;
   CameraMacOSDevice? _selectedCamera;
@@ -44,7 +44,7 @@ class _ViewportCamState extends State<ViewportCam> {
     setState(() {
       _selectedCamera = null;
       _isInitialized = false;
-      _controller = null;
+      // _controller = null;
     });
   }
 
@@ -66,7 +66,7 @@ class _ViewportCamState extends State<ViewportCam> {
                         cameraMode: CameraMacOSMode.video,
                         fit: BoxFit.cover,
                         onCameraInizialized: (controller) {
-                          _controller = controller;
+                          // _controller = controller;
                         },
                       );
                     },
@@ -138,7 +138,7 @@ class _ViewportCamState extends State<ViewportCam> {
                                   child: Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 12),
                                     decoration: BoxDecoration(
-                                      color: isSelected ? Colors.blueAccent.withOpacity(0.2) : Colors.white10,
+                                      color: isSelected ? Colors.blueAccent.withValues(alpha: 0.2) : Colors.white10,
                                       borderRadius: BorderRadius.circular(4),
                                       border: Border.all(
                                         color: isSelected ? Colors.blueAccent : Colors.transparent,

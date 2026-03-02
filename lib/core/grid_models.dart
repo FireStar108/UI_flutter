@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+// No imports needed for GridMode enum and basic class
 
 enum GridMode { system, grid_2x2, grid_3x3, cinematic }
 

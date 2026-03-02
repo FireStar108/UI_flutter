@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'viewport_cam.dart';
 import 'settings_grid.dart';
-import 'grid_background.dart';
+import '../core/grid_models.dart';
 
 class WindowData {
   final String id;
@@ -57,12 +57,12 @@ class WindowItem extends StatelessWidget {
             width: width,
             height: height,
             decoration: BoxDecoration(
-              color: data.color.withOpacity(0.95),
+              color: data.color.withValues(alpha: 0.95),
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: Colors.black, width: 2.0),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.3),
+                  color: Colors.black.withValues(alpha: 0.3),
                   blurRadius: 10,
                   offset: const Offset(0, 4),
                 ),
