@@ -27,7 +27,7 @@ class WindowItem extends StatelessWidget {
   final Function(Offset delta) onResizeUpdate;
   final Function() onPanEnd;
   final Function() onDelete;
-  final Function(GridMode mode)? onGridModeChanged;
+  final Function(GridMode mode, GridMetadata? metadata)? onGridModeChanged;
 
   const WindowItem({
     super.key,

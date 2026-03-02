@@ -20,6 +20,7 @@ class _AppState extends State<App> {
   bool _isAddPanelVisible = false; // Состояние панели выбора окон
   bool _isSettingsPanelVisible = false; // Состояние панели настроек
   GridMode _currentGridMode = GridMode.system;
+  GridMetadata? _customGridMetadata;
   Offset? _previewPosition;
   Size? _previewSize;
 
@@ -32,16 +33,33 @@ class _AppState extends State<App> {
   Future<void> _loadGridMode() async {
     final prefs = await SharedPreferences.getInstance();
     final modeIndex = prefs.getInt('grid_mode') ?? 0;
+    
+    // Загрузка кастомных метаданных, если они есть
+    final hSplits = prefs.getStringList('custom_h_splits');
+    final vSplits = prefs.getStringList('custom_v_splits');
+    GridMetadata? customMeta;
+    if (hSplits != null && vSplits != null) {
+      customMeta = GridMetadata(
+        horizontalSplits: hSplits.map(double.parse).toList(),
+        verticalSplits: vSplits.map(double.parse).toList(),
+      );
+    }
+
     if (mounted) {
       setState(() {
         _currentGridMode = GridMode.values[modeIndex];
+        _customGridMetadata = customMeta;
       });
     }
   }
 
-  Future<void> _saveGridMode(GridMode mode) async {
+  Future<void> _saveGridMode(GridMode mode, GridMetadata? metadata) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt('grid_mode', mode.index);
+    if (metadata != null) {
+      await prefs.setStringList('custom_h_splits', metadata.horizontalSplits.map((e) => e.toString()).toList());
+      await prefs.setStringList('custom_v_splits', metadata.verticalSplits.map((e) => e.toString()).toList());
+    }
   }
 
   void _addWindow(String type) {
@@ -118,7 +136,7 @@ class _AppState extends State<App> {
     final RenderBox renderBox = context.findRenderObject() as RenderBox;
     final localCursor = renderBox.globalToLocal(cursorPosition);
 
-    final metadata = GridMetadata.fromMode(_currentGridMode);
+    final metadata = GridMetadata.fromMode(_currentGridMode, customData: _customGridMetadata);
     
     // Списки всех границ (включая 0 и 1)
     final xBoundaries = [0.0, ...metadata.horizontalSplits, 1.0];
@@ -256,7 +274,7 @@ class _AppState extends State<App> {
                           color: Colors.grey[900],
                           child: Stack(
                             children: [
-                              GridBackground(mode: _currentGridMode),
+                               GridBackground(mode: _currentGridMode, customMetadata: _customGridMetadata),
                               if (_previewPosition != null && _previewSize != null)
                                 Positioned(
                                   left: _previewPosition!.dx * workAreaSize.width,
@@ -280,10 +298,13 @@ class _AppState extends State<App> {
                             data: w,
                             isShiftPressed: _isShiftPressed,
                             screenSize: workAreaSize,
-                            onGridModeChanged: (mode) {
-                              setState(() => _currentGridMode = mode);
-                              _saveGridMode(mode);
-                            },
+                             onGridModeChanged: (mode, metadata) {
+                                setState(() {
+                                  _currentGridMode = mode;
+                                  if (metadata != null) _customGridMetadata = metadata;
+                                });
+                                _saveGridMode(mode, metadata);
+                              },
                             onPanUpdate: (details) => _handlePanUpdate(w, details, workAreaSize),
                             onResizeUpdate: (delta) => _handleResizeUpdate(w, delta, workAreaSize),
                             onPanEnd: () => _handlePanEnd(w),

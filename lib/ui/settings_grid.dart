@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../core/grid_models.dart';
+import 'grid_background.dart';
 
 class GridTemplate {
   final String id;
@@ -16,7 +17,7 @@ class GridTemplate {
 }
 
 class SettingsGrid extends StatefulWidget {
-  final Function(GridMode mode)? onApply;
+  final Function(GridMode mode, GridMetadata? metadata)? onApply;
   const SettingsGrid({super.key, this.onApply});
 
   @override
@@ -26,6 +27,8 @@ class SettingsGrid extends StatefulWidget {
 class _SettingsGridState extends State<SettingsGrid> {
   late List<GridTemplate> _templates;
   GridTemplate? _selectedTemplate;
+  bool _isEditing = false;
+  GridMetadata _customMetadata = GridMetadata(horizontalSplits: [0.5], verticalSplits: [0.5]);
 
   @override
   void initState() {
@@ -125,72 +128,237 @@ class _SettingsGridState extends State<SettingsGrid> {
   }
 
   Widget _buildPreviewArea() {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.black,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white10),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.5),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
+    return Center(
+      child: FittedBox(
+        fit: BoxFit.contain,
+        child: Container(
+          width: 400,
+          height: 225,
+          decoration: BoxDecoration(
+            color: Colors.black,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.white10),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.5),
+                blurRadius: 20,
+                offset: const Offset(0, 10),
+              ),
+            ],
           ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: Stack(
-          children: [
-            // Имитация сетки в превью
-            _getGridPreview(_selectedTemplate?.id),
-            Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    _selectedTemplate?.icon,
-                    size: 64,
-                    color: Colors.white10,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    _selectedTemplate?.name.toUpperCase() ?? '',
-                    style: const TextStyle(
-                      color: Colors.white24,
-                      fontSize: 20,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 4,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Stack(
+              children: [
+                _buildInteractiveGrid(),
+                if (!_isEditing)
+                  Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          _selectedTemplate?.icon,
+                          size: 48,
+                          color: Colors.white10,
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          _selectedTemplate?.name.toUpperCase() ?? '',
+                          style: const TextStyle(
+                            color: Colors.white24,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 2,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ],
-              ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _getGridPreview(String? id) {
-    if (id == 'grid_2x2') {
-      return CustomPaint(
-        size: Size.infinite,
-        painter: GridPreviewPainter(rows: 2, cols: 2),
-      );
-    } else if (id == 'grid_3x3') {
-      return CustomPaint(
-        size: Size.infinite,
-        painter: GridPreviewPainter(rows: 3, cols: 3),
-      );
-    } else if (id == 'system') {
-      return CustomPaint(
-        size: Size.infinite,
-        painter: GridPreviewPainter(rows: 6, cols: 10, isDashed: true),
-      );
-    }
-    return const SizedBox.shrink();
+  Widget _buildInteractiveGrid() {
+    final mode = _isEditing ? GridMode.custom : GridMode.fromModeString(_selectedTemplate?.id ?? 'system');
+    final metadata = _isEditing ? _customMetadata : GridMetadata.fromMode(mode);
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final size = Size(constraints.maxWidth, constraints.maxHeight);
+        
+        return Stack(
+          children: [
+            // Сама отрисовка линий
+            CustomPaint(
+              size: size,
+              painter: GridPainter(mode: mode, customMetadata: metadata),
+            ),
+            // Интерактивные линии (перетаскивание)
+            if (_isEditing) ..._buildDraggableLines(metadata, size),
+            // Кнопки добавления (только в режиме редактирования)
+            if (_isEditing) ..._buildCellButtons(metadata, size),
+          ],
+        );
+      },
+    );
   }
+
+  List<Widget> _buildDraggableLines(GridMetadata metadata, Size size) {
+    List<Widget> handles = [];
+
+    // Вертикальные линии (двигаем по X)
+    for (int i = 0; i < metadata.horizontalSplits.length; i++) {
+        final x = metadata.horizontalSplits[i] * size.width;
+        handles.add(
+          Positioned(
+            left: x - 10,
+            top: 0,
+            bottom: 0,
+            child: GestureDetector(
+              onHorizontalDragUpdate: (details) {
+                setState(() {
+                  double newX = (details.localPosition.dx + x - 10) / size.width;
+                  _customMetadata.horizontalSplits[i] = newX.clamp(0.01, 0.99);
+                });
+              },
+              child: Container(
+                width: 20,
+                color: Colors.transparent, // Невидимая зона захвата
+                child: Center(
+                  child: Container(
+                    width: 2,
+                    color: Colors.orangeAccent.withValues(alpha: 0.5),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+    }
+
+    // Горизонтальные линии (двигаем по Y)
+    for (int i = 0; i < metadata.verticalSplits.length; i++) {
+        final y = metadata.verticalSplits[i] * size.height;
+        handles.add(
+          Positioned(
+            top: y - 10,
+            left: 0,
+            right: 0,
+            child: GestureDetector(
+              onVerticalDragUpdate: (details) {
+                setState(() {
+                  double newY = (details.localPosition.dy + y - 10) / size.height;
+                  _customMetadata.verticalSplits[i] = newY.clamp(0.01, 0.99);
+                });
+              },
+              child: Container(
+                height: 20,
+                color: Colors.transparent, // Невидимая зона захвата
+                child: Center(
+                  child: Container(
+                    height: 2,
+                    color: Colors.orangeAccent.withValues(alpha: 0.5),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+    }
+
+    return handles;
+  }
+
+  List<Widget> _buildCellButtons(GridMetadata metadata, Size size) {
+    final xBounds = [0.0, ...metadata.horizontalSplits, 1.0]..sort();
+    final yBounds = [0.0, ...metadata.verticalSplits, 1.0]..sort();
+    List<Widget> buttons = [];
+
+    for (int ix = 0; ix < xBounds.length - 1; ix++) {
+      for (int iy = 0; iy < yBounds.length - 1; iy++) {
+        final left = xBounds[ix] * size.width;
+        final right = xBounds[ix + 1] * size.width;
+        final top = yBounds[iy] * size.height;
+        final bottom = yBounds[iy + 1] * size.height;
+
+        final centerX = (left + right) / 2;
+        final centerY = (top + bottom) / 2;
+
+        // Кнопка добавления вертикальной линии
+        buttons.add(
+          Positioned(
+            left: centerX - 12,
+            top: centerY - 24,
+            child: _buildAddButton(
+              icon: Icons.unfold_more_rounded,
+              onPressed: () {
+                setState(() {
+                  final newSplit = (xBounds[ix] + xBounds[ix + 1]) / 2;
+                  _customMetadata.horizontalSplits.add(newSplit);
+                  _customMetadata.horizontalSplits.sort();
+                });
+              },
+            ),
+          ),
+        );
+
+        // Кнопка добавления горизонтальной линии
+        buttons.add(
+          Positioned(
+            left: centerX - 24,
+            top: centerY - 12,
+            child: _buildAddButton(
+              icon: Icons.unfold_less_rounded,
+              isVertical: false,
+              onPressed: () {
+                setState(() {
+                  final newSplit = (yBounds[iy] + yBounds[iy + 1]) / 2;
+                  _customMetadata.verticalSplits.add(newSplit);
+                  _customMetadata.verticalSplits.sort();
+                });
+              },
+            ),
+          ),
+        );
+      }
+    }
+    return buttons;
+  }
+
+  Widget _buildAddButton({
+    required IconData icon,
+    required VoidCallback onPressed,
+    bool isVertical = true,
+  }) {
+    return GestureDetector(
+      onTap: onPressed,
+      child: Container(
+        width: 24,
+        height: 24,
+        decoration: BoxDecoration(
+          color: Colors.orangeAccent,
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.3),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Icon(
+          icon,
+          size: 14,
+          color: Colors.black,
+        ),
+      ),
+    );
+  }
+
 
   Widget _buildActionButtons() {
     return Container(
@@ -205,40 +373,49 @@ class _SettingsGridState extends State<SettingsGrid> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             _buildButton(
-              label: 'ИЗМЕНИТЬ СЕТКУ',
-              icon: Icons.edit_note_rounded,
-              color: Colors.white10,
-              onPressed: () {},
+              label: _isEditing ? 'ЗАКОНЧИТЬ' : 'ИЗМЕНИТЬ СЕТКУ',
+              icon: _isEditing ? Icons.check_rounded : Icons.edit_note_rounded,
+              color: _isEditing ? Colors.greenAccent : Colors.white10,
+              onPressed: () {
+                setState(() {
+                  if (!_isEditing) {
+                    // При входе в режим редактирования копируем текущую сетку
+                    final currentMode = GridMode.fromModeString(_selectedTemplate?.id ?? 'system');
+                    final currentMeta = GridMetadata.fromMode(currentMode);
+                    _customMetadata = currentMeta.copyWith();
+                  }
+                  _isEditing = !_isEditing;
+                });
+              },
             ),
-            const SizedBox(width: 8),
+            if (_isEditing) ...[
+              const SizedBox(width: 8),
+              _buildButton(
+                label: 'СБРОСИТЬ',
+                icon: Icons.refresh_rounded,
+                color: Colors.orangeAccent.withValues(alpha: 0.1),
+                onPressed: () {
+                  setState(() {
+                    final currentMode = GridMode.fromModeString(_selectedTemplate?.id ?? 'system');
+                    final currentMeta = GridMetadata.fromMode(currentMode);
+                    _customMetadata = currentMeta.copyWith();
+                  });
+                },
+              ),
+            ],
+            const Spacer(),
             _buildButton(
               label: 'ПРИМЕНИТЬ СЕТКУ',
               icon: Icons.check_circle_outline_rounded,
               color: Colors.orangeAccent,
               onPressed: () {
                 if (widget.onApply != null && _selectedTemplate != null) {
-                  GridMode mode;
-                  switch (_selectedTemplate!.id) {
-                    case 'system':
-                      mode = GridMode.system;
-                      break;
-                    case 'grid_2x2':
-                      mode = GridMode.grid_2x2;
-                      break;
-                    case 'grid_3x3':
-                      mode = GridMode.grid_3x3;
-                      break;
-                    case 'cinematic':
-                      mode = GridMode.cinematic;
-                      break;
-                    default:
-                      mode = GridMode.system;
-                  }
-                  widget.onApply!(mode);
+                  final mode = _isEditing ? GridMode.custom : GridMode.fromModeString(_selectedTemplate!.id);
+                  widget.onApply!(mode, _isEditing ? _customMetadata : null);
                   
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('Сетка "${_selectedTemplate!.name}" применена'),
+                      content: Text(_isEditing ? 'Кастомная сетка применена' : 'Сетка "${_selectedTemplate!.name}" применена'),
                       duration: const Duration(seconds: 2),
                       backgroundColor: Colors.orangeAccent,
                     ),
@@ -325,31 +502,3 @@ class _SettingsGridState extends State<SettingsGrid> {
   }
 }
 
-class GridPreviewPainter extends CustomPainter {
-  final int rows;
-  final int cols;
-  final bool isDashed;
-
-  GridPreviewPainter({required this.rows, required this.cols, this.isDashed = false});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.1)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1;
-
-    for (int i = 1; i < rows; i++) {
-      final y = size.height * (i / rows);
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
-    }
-
-    for (int i = 1; i < cols; i++) {
-      final x = size.width * (i / cols);
-      canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}

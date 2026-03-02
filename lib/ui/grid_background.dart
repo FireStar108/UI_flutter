@@ -3,12 +3,13 @@ import '../core/grid_models.dart';
 
 class GridBackground extends StatelessWidget {
   final GridMode mode;
-  const GridBackground({super.key, this.mode = GridMode.system});
+  final GridMetadata? customMetadata;
+  const GridBackground({super.key, this.mode = GridMode.system, this.customMetadata});
 
   @override
   Widget build(BuildContext context) {
     return CustomPaint(
-      painter: GridPainter(mode: mode),
+      painter: GridPainter(mode: mode, customMetadata: customMetadata),
       child: Container(),
     );
   }
@@ -16,7 +17,8 @@ class GridBackground extends StatelessWidget {
 
 class GridPainter extends CustomPainter {
   final GridMode mode;
-  GridPainter({required this.mode});
+  final GridMetadata? customMetadata;
+  GridPainter({required this.mode, this.customMetadata});
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
@@ -24,7 +26,7 @@ class GridPainter extends CustomPainter {
       ..strokeWidth = 1.0
       ..style = PaintingStyle.stroke;
 
-    final metadata = GridMetadata.fromMode(mode);
+    final metadata = GridMetadata.fromMode(mode, customData: customMetadata);
     const int dashWidth = 8;
     const int dashSpace = 8;
 
@@ -78,5 +80,6 @@ class GridPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant GridPainter oldDelegate) => oldDelegate.mode != mode;
+  bool shouldRepaint(covariant GridPainter oldDelegate) => 
+      oldDelegate.mode != mode || oldDelegate.customMetadata != customMetadata;
 }
