@@ -68,7 +68,7 @@ class _AppState extends State<App> {
     }
   }
 
-  void _addWindow(String type) {
+  void _addWindow(String type, BuildContext buttonContext) {
     // Временно определяем свойства нового окна
     final newWindow = WindowData(
       id: DateTime.now().toString(),
@@ -96,9 +96,15 @@ class _AppState extends State<App> {
       final size = MediaQuery.of(context).size;
       final areaSize = Size(size.width, size.height - 60);
 
-      // Координаты старта (где-то сверху справа, где кнопка "Добавить окно")
-      // Можно взять примерную позицию кнопки "Добавить окно" (например, отступ 150 слева от правого края)
-      final startRect = Rect.fromLTWH(size.width - 200, 10, 48, 48);
+      // Координаты старта
+      final box = buttonContext.findRenderObject() as RenderBox?;
+      Rect startRect;
+      if (box != null) {
+        final position = box.localToGlobal(Offset.zero);
+        startRect = Rect.fromLTWH(position.dx, position.dy, box.size.width, box.size.height);
+      } else {
+        startRect = Rect.fromLTWH(size.width - 200, 10, 48, 48);
+      }
 
       final endRect = Rect.fromLTWH(
         newWindow.relativePosition.dx * areaSize.width,
@@ -172,7 +178,27 @@ class _AppState extends State<App> {
         );
       } catch (e) {
         // Если окно уже было минимизировано
-        _minimizedWindows.removeWhere((w) => w.id == id);
+        try {
+          final w = _minimizedWindows.firstWhere((w) => w.id == id);
+          final index = _minimizedWindows.indexOf(w);
+          _minimizedWindows.remove(w);
+
+          final startRect = Rect.fromLTWH(180.0 + index * 150.0, 6.0, 140, 48);
+
+          final key = GlobalKey();
+          _flyingAnimations.add(
+            ExplodingWindow(
+              key: key,
+              data: w,
+              startRect: startRect,
+              onComplete: () {
+                setState(() {
+                  _flyingAnimations.removeWhere((anim) => anim.key == key);
+                });
+              },
+            ) as Widget,
+          );
+        } catch (_) {}
       }
     });
   }
@@ -405,6 +431,7 @@ class _AppState extends State<App> {
                           final workAreaSize = Size(size.width, size.height - 60);
                           _restoreWindow(w, workAreaSize);
                         },
+                        onClose: _removeWindow,
                       ),
                     ),
                     const SizedBox(width: 16),
@@ -513,14 +540,14 @@ class _AppState extends State<App> {
                                     icon: Icons.videocam_outlined,
                                     label: 'viewport_cam',
                                     color: Colors.blueAccent,
-                                    onTap: () => _addWindow('viewport_cam'),
+                                    onTap: (ctx) => _addWindow('viewport_cam', ctx),
                                   ),
                                   const SizedBox(width: 12),
                                   _buildTypeOption(
                                     icon: Icons.folder_open_rounded,
                                     label: 'file_browser',
                                     color: Colors.greenAccent,
-                                    onTap: () => _addWindow('file_browser'),
+                                    onTap: (ctx) => _addWindow('file_browser', ctx),
                                   ),
                                 ],
                               ),
@@ -556,7 +583,7 @@ class _AppState extends State<App> {
                                     icon: Icons.grid_4x4,
                                     label: 'settings_grid',
                                     color: Colors.orangeAccent,
-                                    onTap: () => _addWindow('settings_grid'),
+                                    onTap: (ctx) => _addWindow('settings_grid', ctx),
                                   ),
                                 ],
                               ),
@@ -581,20 +608,22 @@ class _AppState extends State<App> {
     required IconData icon,
     required String label,
     required Color color,
-    required VoidCallback onTap,
+    required void Function(BuildContext) onTap,
   }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 32, color: color),
-            const SizedBox(height: 8),
-            Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-          ],
+    return Builder(
+      builder: (context) => InkWell(
+        onTap: () => onTap(context),
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 32, color: color),
+              const SizedBox(height: 8),
+              Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+            ],
+          ),
         ),
       ),
     );

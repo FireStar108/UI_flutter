@@ -5,6 +5,7 @@ class Taskbar extends StatelessWidget {
   final List<WindowData> minimizedWindows;
   final Function(int oldIndex, int newIndex) onReorder;
   final Function(WindowData) onRestore;
+  final Function(String) onClose;
   // Ключ для получения позиции (если нужно точной координаты, но пока можно захардкодить)
   
   const Taskbar({
@@ -12,6 +13,7 @@ class Taskbar extends StatelessWidget {
     required this.minimizedWindows,
     required this.onReorder,
     required this.onRestore,
+    required this.onClose,
   });
 
   @override
@@ -83,6 +85,14 @@ class Taskbar extends StatelessWidget {
                       fontSize: 10,
                       fontWeight: FontWeight.bold,
                     ),
+                  ),
+                ),
+                InkWell(
+                  onTap: () => onClose(w.id),
+                  borderRadius: BorderRadius.circular(12),
+                  child: const Padding(
+                    padding: EdgeInsets.all(2.0),
+                    child: Icon(Icons.close, size: 14, color: Colors.white54),
                   ),
                 ),
               ],
