@@ -60,7 +60,7 @@ class WindowItem extends StatelessWidget {
             width: width,
             height: height,
             decoration: BoxDecoration(
-              color: data.color.withValues(alpha: 0.95),
+              color: Colors.grey[900]?.withValues(alpha: 0.98),
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: themeColor.withValues(alpha: 0.7), width: 1.5),
               boxShadow: [

@@ -138,11 +138,7 @@ class _FileBrowserState extends State<FileBrowser> {
         children: [
           if (_currentPath != null) ...[
             Expanded(
-              child: Text(
-                p.basename(_currentPath!),
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold),
-              ),
+              child: _buildBreadcrumbs(),
             ),
             _buildToolbarIcon(Icons.refresh_rounded, _refresh, 'Обновить'),
             _buildToolbarIcon(Icons.create_new_folder_outlined, _createFolder, 'Новая папка'),
@@ -159,6 +155,55 @@ class _FileBrowserState extends State<FileBrowser> {
       ),
     );
   }
+  Widget _buildBreadcrumbs() {
+    if (_currentPath == null) return const SizedBox.shrink();
+    final parts = p.split(_currentPath!);
+    List<Widget> crumbs = [];
+    String cumulativePath = "";
+
+    for (int i = 0; i < parts.length; i++) {
+      final part = parts[i];
+      if (i == 0 && (part == '/' || part.contains(':'))) {
+        cumulativePath = part;
+      } else {
+        cumulativePath = p.join(cumulativePath, i == 0 ? "" : part);
+      }
+      
+      final currentSegmentPath = cumulativePath;
+      final isLast = i == parts.length - 1;
+
+      crumbs.add(
+        InkWell(
+          onTap: () {
+            setState(() => _currentPath = currentSegmentPath);
+            _refresh();
+          },
+          borderRadius: BorderRadius.circular(4),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+            child: Text(
+              part == '/' ? 'Root' : part,
+              style: TextStyle(
+                color: isLast ? widget.accentColor : Colors.white60,
+                fontSize: 11,
+                fontWeight: isLast ? FontWeight.bold : FontWeight.normal,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      if (!isLast) {
+        crumbs.add(const Text('/', style: TextStyle(color: Colors.white24, fontSize: 11)));
+      }
+    }
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(children: crumbs),
+    );
+  }
+
 
   Widget _buildToolbarIcon(IconData icon, VoidCallback onTap, String tooltip) {
     return Tooltip(
