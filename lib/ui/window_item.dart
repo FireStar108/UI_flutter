@@ -118,7 +118,7 @@ class WindowItem extends StatelessWidget {
                       : data.type == 'settings_grid'
                           ? SettingsGrid(onApply: onGridModeChanged)
                           : data.type == 'file_browser'
-                              ? const FileBrowser()
+                              ? FileBrowser(accentColor: themeColor)
                               : const Center(
                               child: Icon(Icons.window, color: Colors.white30, size: 40),
                             ),
