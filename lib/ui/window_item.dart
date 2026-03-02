@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'viewport_cam.dart';
 import 'settings_grid.dart';
+import 'file_browser.dart';
 import '../core/grid_models.dart';
 
 class WindowData {
@@ -116,7 +117,9 @@ class WindowItem extends StatelessWidget {
                       ? const ViewportCam()
                       : data.type == 'settings_grid'
                           ? SettingsGrid(onApply: onGridModeChanged)
-                          : const Center(
+                          : data.type == 'file_browser'
+                              ? const FileBrowser()
+                              : const Center(
                               child: Icon(Icons.window, color: Colors.white30, size: 40),
                             ),
                 ),

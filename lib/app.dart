@@ -74,8 +74,14 @@ class _AppState extends State<App> {
               ? const Size(0.35, 0.197) 
               : type == 'settings_grid'
                   ? const Size(0.5, 0.45)
-                  : const Size(0.3, 0.3),
-          color: type == 'settings_grid' ? Colors.orangeAccent : Colors.blueAccent,
+                  : type == 'file_browser'
+                      ? const Size(0.4, 0.5)
+                      : const Size(0.3, 0.3),
+          color: type == 'settings_grid' 
+              ? Colors.orangeAccent 
+              : type == 'file_browser'
+                  ? Colors.greenAccent
+                  : Colors.blueAccent,
         ),
       );
       _isAddPanelVisible = false; // Закрываем панели после выбора
@@ -343,6 +349,13 @@ class _AppState extends State<App> {
                                     label: 'viewport_cam',
                                     color: Colors.blueAccent,
                                     onTap: () => _addWindow('viewport_cam'),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  _buildTypeOption(
+                                    icon: Icons.folder_open_rounded,
+                                    label: 'file_browser',
+                                    color: Colors.greenAccent,
+                                    onTap: () => _addWindow('file_browser'),
                                   ),
                                 ],
                               ),
