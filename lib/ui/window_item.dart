@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'viewport_cam.dart';
 import 'settings_grid.dart';
+import 'grid_background.dart';
 
 class WindowData {
   final String id;
@@ -26,6 +27,7 @@ class WindowItem extends StatelessWidget {
   final Function(Offset delta) onResizeUpdate;
   final Function() onPanEnd;
   final Function() onDelete;
+  final Function(GridMode mode)? onGridModeChanged;
 
   const WindowItem({
     super.key,
@@ -36,6 +38,7 @@ class WindowItem extends StatelessWidget {
     required this.onResizeUpdate,
     required this.onPanEnd,
     required this.onDelete,
+    this.onGridModeChanged,
   });
 
   @override
@@ -110,7 +113,7 @@ class WindowItem extends StatelessWidget {
                   child: data.type == 'viewport_cam'
                       ? const ViewportCam()
                       : data.type == 'settings_grid'
-                          ? const SettingsGrid()
+                          ? SettingsGrid(onApply: onGridModeChanged)
                           : const Center(
                               child: Icon(Icons.window, color: Colors.white30, size: 40),
                             ),

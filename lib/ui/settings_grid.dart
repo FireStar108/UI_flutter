@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'grid_background.dart';
 
 class GridTemplate {
   final String id;
@@ -15,7 +16,8 @@ class GridTemplate {
 }
 
 class SettingsGrid extends StatefulWidget {
-  const SettingsGrid({super.key});
+  final Function(GridMode mode)? onApply;
+  const SettingsGrid({super.key, this.onApply});
 
   @override
   State<SettingsGrid> createState() => _SettingsGridState();
@@ -213,7 +215,36 @@ class _SettingsGridState extends State<SettingsGrid> {
               label: 'ПРИМЕНИТЬ СЕТКУ',
               icon: Icons.check_circle_outline_rounded,
               color: Colors.orangeAccent,
-              onPressed: () {},
+              onPressed: () {
+                if (widget.onApply != null && _selectedTemplate != null) {
+                  GridMode mode;
+                  switch (_selectedTemplate!.id) {
+                    case 'system':
+                      mode = GridMode.system;
+                      break;
+                    case 'grid_2x2':
+                      mode = GridMode.grid_2x2;
+                      break;
+                    case 'grid_3x3':
+                      mode = GridMode.grid_3x3;
+                      break;
+                    case 'cinematic':
+                      mode = GridMode.cinematic;
+                      break;
+                    default:
+                      mode = GridMode.system;
+                  }
+                  widget.onApply!(mode);
+                  
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Сетка "${_selectedTemplate!.name}" применена'),
+                      duration: const Duration(seconds: 2),
+                      backgroundColor: Colors.orangeAccent,
+                    ),
+                  );
+                }
+              },
             ),
           ],
         ),

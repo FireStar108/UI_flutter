@@ -17,6 +17,7 @@ class _AppState extends State<App> {
   bool _isShiftPressed = false;
   bool _isAddPanelVisible = false; // Состояние панели выбора окон
   bool _isSettingsPanelVisible = false; // Состояние панели настроек
+  GridMode _currentGridMode = GridMode.system;
   Offset? _previewPosition;
   Size? _previewSize;
 
@@ -207,7 +208,7 @@ class _AppState extends State<App> {
                           color: Colors.grey[900],
                           child: Stack(
                             children: [
-                              const GridBackground(),
+                              GridBackground(mode: _currentGridMode),
                               if (_previewPosition != null && _previewSize != null)
                                 Positioned(
                                   left: _previewPosition!.dx * workAreaSize.width,
@@ -231,6 +232,9 @@ class _AppState extends State<App> {
                             data: w,
                             isShiftPressed: _isShiftPressed,
                             screenSize: workAreaSize,
+                            onGridModeChanged: (mode) {
+                              setState(() => _currentGridMode = mode);
+                            },
                             onPanUpdate: (details) => _handlePanUpdate(w, details, workAreaSize),
                             onResizeUpdate: (delta) => _handleResizeUpdate(w, delta, workAreaSize),
                             onPanEnd: () => _handlePanEnd(w),
