@@ -28,8 +28,10 @@ class _AppState extends State<App> {
           relativePosition: const Offset(0.1, 0.1),
           relativeSize: type == 'viewport_cam' 
               ? const Size(0.35, 0.197) 
-              : const Size(0.3, 0.3),
-          color: Colors.blueAccent,
+              : type == 'settings_grid'
+                  ? const Size(0.25, 0.4)
+                  : const Size(0.3, 0.3),
+          color: type == 'settings_grid' ? Colors.orangeAccent : Colors.blueAccent,
         ),
       );
       _isAddPanelVisible = false; // Закрываем панель после выбора
@@ -158,6 +160,17 @@ class _AppState extends State<App> {
                       style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white70),
                     ),
                     const Spacer(),
+                    ElevatedButton.icon(
+                      onPressed: () => _addWindow('settings_grid'),
+                      icon: const Icon(Icons.settings),
+                      label: const Text('Настройки'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white10,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
                     ElevatedButton.icon(
                       onPressed: _toggleAddPanel,
                       icon: Icon(_isAddPanelVisible ? Icons.close : Icons.add),

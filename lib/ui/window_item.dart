@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'viewport_cam.dart';
+import 'settings_grid.dart';
 
 class WindowData {
   final String id;
@@ -108,9 +109,11 @@ class WindowItem extends StatelessWidget {
                 Expanded(
                   child: data.type == 'viewport_cam'
                       ? const ViewportCam()
-                      : const Center(
-                          child: Icon(Icons.window, color: Colors.white30, size: 40),
-                        ),
+                      : data.type == 'settings_grid'
+                          ? const SettingsGrid()
+                          : const Center(
+                              child: Icon(Icons.window, color: Colors.white30, size: 40),
+                            ),
                 ),
               ],
             ),
