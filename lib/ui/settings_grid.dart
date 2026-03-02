@@ -230,7 +230,7 @@ class _SettingsGridState extends State<SettingsGrid> {
                 CustomPaint(
                   size: size,
                   painter: GridPainter(
-                    mode: _isEditing ? GridMode.custom : GridMode.system,
+                    mode: GridMode.custom,
                     customMetadata: metadata,
                   ),
                 ),
@@ -354,11 +354,11 @@ class _SettingsGridState extends State<SettingsGrid> {
           ],
         ),
         child: _isVerticalMenu 
-          ? Column(
+          ? Row(
               mainAxisSize: MainAxisSize.min,
               children: _buildMenuButtons(splits, isBorder),
             )
-          : Row(
+          : Column(
               mainAxisSize: MainAxisSize.min,
               children: _buildMenuButtons(splits, isBorder),
             ),

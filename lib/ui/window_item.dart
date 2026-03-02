@@ -28,6 +28,7 @@ class WindowItem extends StatelessWidget {
   final Function() onPanEnd;
   final Function() onDelete;
   final Function(GridMode mode, GridMetadata? metadata)? onGridModeChanged;
+  final Color themeColor;
 
   const WindowItem({
     super.key,
@@ -39,6 +40,7 @@ class WindowItem extends StatelessWidget {
     required this.onPanEnd,
     required this.onDelete,
     this.onGridModeChanged,
+    required this.themeColor,
   });
 
   @override
@@ -59,7 +61,7 @@ class WindowItem extends StatelessWidget {
             decoration: BoxDecoration(
               color: data.color.withValues(alpha: 0.95),
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.black, width: 2.0),
+              border: Border.all(color: themeColor.withValues(alpha: 0.7), width: 1.5),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withValues(alpha: 0.3),

@@ -299,6 +299,7 @@ class _AppState extends State<App> {
                             data: w,
                             isShiftPressed: _isShiftPressed,
                             screenSize: workAreaSize,
+                            themeColor: GridMetadata.fromMode(_currentGridMode, customData: _customGridMetadata).color,
                              onGridModeChanged: (mode, metadata) {
                                 setState(() {
                                   _currentGridMode = mode;
