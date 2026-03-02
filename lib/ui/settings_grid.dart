@@ -212,62 +212,72 @@ class _SettingsGridState extends State<SettingsGrid> {
 
     // Вертикальные линии (двигаем по X)
     for (int i = 0; i < metadata.horizontalSplits.length; i++) {
-        final x = metadata.horizontalSplits[i] * size.width;
-        handles.add(
-          Positioned(
-            left: x - 10,
-            top: 0,
-            bottom: 0,
-            child: GestureDetector(
-              onHorizontalDragUpdate: (details) {
-                setState(() {
-                  double newX = (details.localPosition.dx + x - 10) / size.width;
-                  _customMetadata.horizontalSplits[i] = newX.clamp(0.01, 0.99);
-                });
-              },
-              child: Container(
-                width: 20,
-                color: Colors.transparent, // Невидимая зона захвата
-                child: Center(
-                  child: Container(
-                    width: 2,
-                    color: Colors.orangeAccent.withOpacity(0.5),
-                  ),
+      final x = metadata.horizontalSplits[i] * size.width;
+      handles.add(
+        Positioned(
+          left: x - 15,
+          top: 0,
+          bottom: 0,
+          child: GestureDetector(
+            onHorizontalDragUpdate: (details) {
+              setState(() {
+                double newX = (details.localPosition.dx + x - 15) / size.width;
+                // Ограничения: не выходить за соседние линии
+                double minBound = (i == 0) ? 0.01 : metadata.horizontalSplits[i - 1] + 0.02;
+                double maxBound = (i == metadata.horizontalSplits.length - 1)
+                    ? 0.99
+                    : metadata.horizontalSplits[i + 1] - 0.02;
+                _customMetadata.horizontalSplits[i] = newX.clamp(minBound, maxBound);
+              });
+            },
+            child: Container(
+              width: 30,
+              color: Colors.transparent,
+              child: Center(
+                child: Container(
+                  width: 2,
+                  color: Colors.orangeAccent.withOpacity(0.5),
                 ),
               ),
             ),
           ),
-        );
+        ),
+      );
     }
 
     // Горизонтальные линии (двигаем по Y)
     for (int i = 0; i < metadata.verticalSplits.length; i++) {
-        final y = metadata.verticalSplits[i] * size.height;
-        handles.add(
-          Positioned(
-            top: y - 10,
-            left: 0,
-            right: 0,
-            child: GestureDetector(
-              onVerticalDragUpdate: (details) {
-                setState(() {
-                  double newY = (details.localPosition.dy + y - 10) / size.height;
-                  _customMetadata.verticalSplits[i] = newY.clamp(0.01, 0.99);
-                });
-              },
-              child: Container(
-                height: 20,
-                color: Colors.transparent, // Невидимая зона захвата
-                child: Center(
-                  child: Container(
-                    height: 2,
-                    color: Colors.orangeAccent.withOpacity(0.5),
-                  ),
+      final y = metadata.verticalSplits[i] * size.height;
+      handles.add(
+        Positioned(
+          top: y - 15,
+          left: 0,
+          right: 0,
+          child: GestureDetector(
+            onVerticalDragUpdate: (details) {
+              setState(() {
+                double newY = (details.localPosition.dy + y - 15) / size.height;
+                // Ограничения: не выходить за соседние линии
+                double minBound = (i == 0) ? 0.01 : metadata.verticalSplits[i - 1] + 0.02;
+                double maxBound = (i == metadata.verticalSplits.length - 1)
+                    ? 0.99
+                    : metadata.verticalSplits[i + 1] - 0.02;
+                _customMetadata.verticalSplits[i] = newY.clamp(minBound, maxBound);
+              });
+            },
+            child: Container(
+              height: 30,
+              color: Colors.transparent,
+              child: Center(
+                child: Container(
+                  height: 2,
+                  color: Colors.orangeAccent.withOpacity(0.5),
                 ),
               ),
             ),
           ),
-        );
+        ),
+      );
     }
 
     return handles;
@@ -288,39 +298,38 @@ class _SettingsGridState extends State<SettingsGrid> {
         final centerX = (left + right) / 2;
         final centerY = (top + bottom) / 2;
 
-        // Кнопка добавления вертикальной линии
+        // Кнопки рядом горизонтально
         buttons.add(
           Positioned(
-            left: centerX - 12,
-            top: centerY - 24,
-            child: _buildAddButton(
-              icon: Icons.unfold_more_rounded,
-              onPressed: () {
-                setState(() {
-                  final newSplit = (xBounds[ix] + xBounds[ix + 1]) / 2;
-                  _customMetadata.horizontalSplits.add(newSplit);
-                  _customMetadata.horizontalSplits.sort();
-                });
-              },
-            ),
-          ),
-        );
-
-        // Кнопка добавления горизонтальной линии
-        buttons.add(
-          Positioned(
-            left: centerX - 24,
-            top: centerY - 12,
-            child: _buildAddButton(
-              icon: Icons.unfold_less_rounded,
-              isVertical: false,
-              onPressed: () {
-                setState(() {
-                  final newSplit = (yBounds[iy] + yBounds[iy + 1]) / 2;
-                  _customMetadata.verticalSplits.add(newSplit);
-                  _customMetadata.verticalSplits.sort();
-                });
-              },
+            left: centerX - 34,
+            top: centerY - 16,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Вертикальное деление (view_column)
+                _buildAddButton(
+                  icon: Icons.view_column_rounded,
+                  onPressed: () {
+                    setState(() {
+                      final newSplit = (xBounds[ix] + xBounds[ix + 1]) / 2;
+                      _customMetadata.horizontalSplits.add(newSplit);
+                      _customMetadata.horizontalSplits.sort();
+                    });
+                  },
+                ),
+                const SizedBox(width: 4),
+                // Горизонтальное деление (view_stream)
+                _buildAddButton(
+                  icon: Icons.view_stream_rounded,
+                  onPressed: () {
+                    setState(() {
+                      final newSplit = (yBounds[iy] + yBounds[iy + 1]) / 2;
+                      _customMetadata.verticalSplits.add(newSplit);
+                      _customMetadata.verticalSplits.sort();
+                    });
+                  },
+                ),
+              ],
             ),
           ),
         );
@@ -332,19 +341,18 @@ class _SettingsGridState extends State<SettingsGrid> {
   Widget _buildAddButton({
     required IconData icon,
     required VoidCallback onPressed,
-    bool isVertical = true,
   }) {
     return GestureDetector(
       onTap: onPressed,
       child: Container(
-        width: 24,
-        height: 24,
+        width: 32,
+        height: 32,
         decoration: BoxDecoration(
           color: Colors.orangeAccent,
-          shape: BoxShape.circle,
+          borderRadius: BorderRadius.circular(8),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.3),
+              color: Colors.black.withOpacity(0.3),
               blurRadius: 4,
               offset: const Offset(0, 2),
             ),
@@ -352,7 +360,7 @@ class _SettingsGridState extends State<SettingsGrid> {
         ),
         child: Icon(
           icon,
-          size: 14,
+          size: 18,
           color: Colors.black,
         ),
       ),
