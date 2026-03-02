@@ -10,6 +10,7 @@ class WindowData {
   Offset relativePosition; // 0..1
   Size relativeSize; // 0..1
   final Color color;
+  bool isMinimized;
 
   WindowData({
     required this.id,
@@ -17,6 +18,7 @@ class WindowData {
     this.relativePosition = Offset.zero,
     this.relativeSize = const Size(0.3, 0.3), // 20% от экрана
     this.color = const Color(0xFF212121), // Темно-серый по умолчанию
+    this.isMinimized = false,
   });
 }
 
@@ -27,6 +29,7 @@ class WindowItem extends StatelessWidget {
   final Function(DragUpdateDetails details) onPanUpdate;
   final Function(Offset delta) onResizeUpdate;
   final Function() onPanEnd;
+  final Function() onMinimize;
   final Function() onDelete;
   final Function(GridMode mode, GridMetadata? metadata)? onGridModeChanged;
   final Color themeColor;
@@ -39,6 +42,7 @@ class WindowItem extends StatelessWidget {
     required this.onPanUpdate,
     required this.onResizeUpdate,
     required this.onPanEnd,
+    required this.onMinimize,
     required this.onDelete,
     this.onGridModeChanged,
     required this.themeColor,
@@ -100,6 +104,14 @@ class WindowItem extends StatelessWidget {
                             ),
                           ),
                         ),
+                        IconButton(
+                          icon: const Icon(Icons.minimize, size: 16, color: Colors.white54),
+                          onPressed: onMinimize,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          splashRadius: 16,
+                        ),
+                        const SizedBox(width: 8),
                         IconButton(
                           icon: const Icon(Icons.close, size: 16, color: Colors.white54),
                           onPressed: onDelete,

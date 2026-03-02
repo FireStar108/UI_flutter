@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'ui/grid_background.dart';
 import 'ui/window_item.dart';
+import 'ui/taskbar.dart';
+import 'ui/flying_window.dart';
 import 'core/grid_models.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:math' as math;
@@ -17,6 +19,8 @@ class App extends StatefulWidget {
 
 class _AppState extends State<App> {
   final List<WindowData> _windows = [];
+  final List<WindowData> _minimizedWindows = [];
+  final List<Widget> _flyingAnimations = [];
   bool _isShiftPressed = false;
   bool _isAddPanelVisible = false; // Состояние панели выбора окон
   bool _isSettingsPanelVisible = false; // Состояние панели настроек
@@ -106,8 +110,88 @@ class _AppState extends State<App> {
   void _removeWindow(String id) {
     setState(() {
       _windows.removeWhere((w) => w.id == id);
+      _minimizedWindows.removeWhere((w) => w.id == id);
     });
   }
+
+  void _minimizeWindow(WindowData w, Size areaSize) {
+    setState(() {
+      _windows.remove(w);
+      w.isMinimized = true;
+
+      // Начальные координаты относительно экрана (добавляем 60px высоту панели)
+      final startRect = Rect.fromLTWH(
+        w.relativePosition.dx * areaSize.width,
+        w.relativePosition.dy * areaSize.height + 60.0,
+        w.relativeSize.width * areaSize.width,
+        w.relativeSize.height * areaSize.height,
+      );
+      // Приблизительная позиция в Taskbar в верхней панели
+      final endRect = Rect.fromLTWH(180.0 + _minimizedWindows.length * 150.0, 6.0, 140, 48);
+
+      final key = GlobalKey();
+      _flyingAnimations.add(
+        FlyingWindow(
+          key: key,
+          data: w,
+          startRect: startRect,
+          endRect: endRect,
+          isMinimizing: true,
+          onComplete: () {
+            setState(() {
+              _flyingAnimations.removeWhere((anim) => anim.key == key);
+              _minimizedWindows.add(w);
+            });
+          },
+        ),
+      );
+    });
+  }
+
+  void _restoreWindow(WindowData w, Size areaSize) {
+    setState(() {
+      final index = _minimizedWindows.indexOf(w);
+      _minimizedWindows.remove(w);
+      w.isMinimized = false;
+
+      final startRect = Rect.fromLTWH(180.0 + index * 150.0, 6.0, 140, 48);
+      // Конечные координаты (добавляем 60px высоту панели)
+      final endRect = Rect.fromLTWH(
+        w.relativePosition.dx * areaSize.width,
+        w.relativePosition.dy * areaSize.height + 60.0,
+        w.relativeSize.width * areaSize.width,
+        w.relativeSize.height * areaSize.height,
+      );
+
+      final key = GlobalKey();
+      _flyingAnimations.add(
+        FlyingWindow(
+          key: key,
+          data: w,
+          startRect: startRect,
+          endRect: endRect,
+          isMinimizing: false,
+          onComplete: () {
+            setState(() {
+              _flyingAnimations.removeWhere((anim) => anim.key == key);
+              _windows.add(w);
+            });
+          },
+        ),
+      );
+    });
+  }
+
+  void _onReorderMinimized(int oldIndex, int newIndex) {
+    setState(() {
+      if (oldIndex < newIndex) {
+        newIndex -= 1;
+      }
+      final WindowData item = _minimizedWindows.removeAt(oldIndex);
+      _minimizedWindows.insert(newIndex, item);
+    });
+  }
+
 
   void _handlePanUpdate(WindowData data, DragUpdateDetails details, Size areaSize) {
     setState(() {
@@ -227,10 +311,12 @@ class _AppState extends State<App> {
           });
         },
         child: Scaffold(
-          body: Column(
+          body: Stack(
             children: [
-              // Верхняя плашка
-              Container(
+              Column(
+                children: [
+                  // Верхняя плашка
+                  Container(
                 height: 60,
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 decoration: BoxDecoration(
@@ -240,10 +326,25 @@ class _AppState extends State<App> {
                 child: Row(
                   children: [
                     const Text(
-                      'Панель управления',
-                      style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white70),
+                      'UI Workspace',
+                      style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white70, fontSize: 16),
                     ),
-                    const Spacer(),
+                    const SizedBox(width: 24),
+                    // Панель задач здесь
+                    Expanded(
+                      child: Taskbar(
+                        minimizedWindows: _minimizedWindows,
+                        onReorder: _onReorderMinimized,
+                        onRestore: (w) {
+                          // Мы не можем получить workAreaSize напрямую тут,
+                          // Поэтому используем MediaQuery и вычитаем 60px верхней панели
+                          final size = MediaQuery.of(context).size;
+                          final workAreaSize = Size(size.width, size.height - 60);
+                          _restoreWindow(w, workAreaSize);
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 16),
                     ElevatedButton.icon(
                       onPressed: _toggleSettingsPanel,
                       icon: Icon(_isSettingsPanelVisible ? Icons.close : Icons.settings),
@@ -316,6 +417,7 @@ class _AppState extends State<App> {
                             onPanUpdate: (details) => _handlePanUpdate(w, details, workAreaSize),
                             onResizeUpdate: (delta) => _handleResizeUpdate(w, delta, workAreaSize),
                             onPanEnd: () => _handlePanEnd(w),
+                            onMinimize: () => _minimizeWindow(w, workAreaSize),
                             onDelete: () => _removeWindow(w.id),
                           );
                         }),
@@ -405,9 +507,11 @@ class _AppState extends State<App> {
               ),
             ],
           ),
-        ),
+          // Летящие анимации поверх всего экрана (включая верхнюю панель)
+          ..._flyingAnimations,
+        ],
       ),
-    );
+    )));
   }
 
   Widget _buildTypeOption({
