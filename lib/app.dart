@@ -4,6 +4,7 @@ import 'ui/grid_background.dart';
 import 'ui/window_item.dart';
 import 'ui/taskbar.dart';
 import 'ui/flying_window.dart';
+import 'ui/exploding_window.dart';
 import 'core/grid_models.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:math' as math;
@@ -68,28 +69,60 @@ class _AppState extends State<App> {
   }
 
   void _addWindow(String type) {
-    setState(() {
-      _windows.add(
-        WindowData(
-          id: DateTime.now().toString(),
-          type: type,
-          relativePosition: const Offset(0.1, 0.1),
-          relativeSize: type == 'viewport_cam' 
-              ? const Size(0.35, 0.197) 
-              : type == 'settings_grid'
-                  ? const Size(0.5, 0.45)
-                  : type == 'file_browser'
-                      ? const Size(0.4, 0.5)
-                      : const Size(0.3, 0.3),
-          color: type == 'settings_grid' 
-              ? Colors.orangeAccent 
+    // Временно определяем свойства нового окна
+    final newWindow = WindowData(
+      id: DateTime.now().toString(),
+      type: type,
+      relativePosition: const Offset(0.1, 0.1),
+      relativeSize: type == 'viewport_cam' 
+          ? const Size(0.35, 0.197) 
+          : type == 'settings_grid'
+              ? const Size(0.5, 0.45)
               : type == 'file_browser'
-                  ? Colors.greenAccent
-                  : Colors.blueAccent,
-        ),
-      );
+                  ? const Size(0.4, 0.5)
+                  : const Size(0.3, 0.3),
+      color: type == 'settings_grid' 
+          ? Colors.orangeAccent 
+          : type == 'file_browser'
+              ? Colors.greenAccent
+              : Colors.blueAccent,
+    );
+
+    setState(() {
       _isAddPanelVisible = false; // Закрываем панели после выбора
       _isSettingsPanelVisible = false;
+
+      // Получаем размеры области (экран)
+      final size = MediaQuery.of(context).size;
+      final areaSize = Size(size.width, size.height - 60);
+
+      // Координаты старта (где-то сверху справа, где кнопка "Добавить окно")
+      // Можно взять примерную позицию кнопки "Добавить окно" (например, отступ 150 слева от правого края)
+      final startRect = Rect.fromLTWH(size.width - 200, 10, 48, 48);
+
+      final endRect = Rect.fromLTWH(
+        newWindow.relativePosition.dx * areaSize.width,
+        newWindow.relativePosition.dy * areaSize.height + 60.0,
+        newWindow.relativeSize.width * areaSize.width,
+        newWindow.relativeSize.height * areaSize.height,
+      );
+
+      final key = GlobalKey();
+      _flyingAnimations.add(
+        FlyingWindow(
+          key: key,
+          data: newWindow,
+          startRect: startRect,
+          endRect: endRect,
+          isMinimizing: false,
+          onComplete: () {
+            setState(() {
+              _flyingAnimations.removeWhere((anim) => anim.key == key);
+              _windows.add(newWindow);
+            });
+          },
+        ),
+      );
     });
   }
 
@@ -109,8 +142,38 @@ class _AppState extends State<App> {
 
   void _removeWindow(String id) {
     setState(() {
-      _windows.removeWhere((w) => w.id == id);
-      _minimizedWindows.removeWhere((w) => w.id == id);
+      // Ищем окно в активных
+      try {
+        final w = _windows.firstWhere((w) => w.id == id);
+        _windows.remove(w);
+
+        // Расчитываем текущую позицию
+        final size = MediaQuery.of(context).size;
+        final areaSize = Size(size.width, size.height - 60);
+        final startRect = Rect.fromLTWH(
+          w.relativePosition.dx * areaSize.width,
+          w.relativePosition.dy * areaSize.height + 60.0,
+          w.relativeSize.width * areaSize.width,
+          w.relativeSize.height * areaSize.height,
+        );
+
+        final key = GlobalKey();
+        _flyingAnimations.add(
+          ExplodingWindow(
+            key: key,
+            data: w,
+            startRect: startRect,
+            onComplete: () {
+              setState(() {
+                _flyingAnimations.removeWhere((anim) => anim.key == key);
+              });
+            },
+          ) as Widget,
+        );
+      } catch (e) {
+        // Если окно уже было минимизировано
+        _minimizedWindows.removeWhere((w) => w.id == id);
+      }
     });
   }
 
