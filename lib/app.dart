@@ -30,7 +30,7 @@ class _AppState extends State<App> {
           relativeSize: type == 'viewport_cam' 
               ? const Size(0.35, 0.197) 
               : type == 'settings_grid'
-                  ? const Size(0.25, 0.4)
+                  ? const Size(0.5, 0.45)
                   : const Size(0.3, 0.3),
           color: type == 'settings_grid' ? Colors.orangeAccent : Colors.blueAccent,
         ),
