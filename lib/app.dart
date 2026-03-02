@@ -15,7 +15,8 @@ class App extends StatefulWidget {
 class _AppState extends State<App> {
   final List<WindowData> _windows = [];
   bool _isShiftPressed = false;
-  bool _isAddPanelVisible = false; // Состояние панели выбора
+  bool _isAddPanelVisible = false; // Состояние панели выбора окон
+  bool _isSettingsPanelVisible = false; // Состояние панели настроек
   Offset? _previewPosition;
   Size? _previewSize;
 
@@ -34,13 +35,22 @@ class _AppState extends State<App> {
           color: type == 'settings_grid' ? Colors.orangeAccent : Colors.blueAccent,
         ),
       );
-      _isAddPanelVisible = false; // Закрываем панель после выбора
+      _isAddPanelVisible = false; // Закрываем панели после выбора
+      _isSettingsPanelVisible = false;
     });
   }
 
   void _toggleAddPanel() {
     setState(() {
       _isAddPanelVisible = !_isAddPanelVisible;
+      if (_isAddPanelVisible) _isSettingsPanelVisible = false;
+    });
+  }
+
+  void _toggleSettingsPanel() {
+    setState(() {
+      _isSettingsPanelVisible = !_isSettingsPanelVisible;
+      if (_isSettingsPanelVisible) _isAddPanelVisible = false;
     });
   }
 
@@ -161,11 +171,11 @@ class _AppState extends State<App> {
                     ),
                     const Spacer(),
                     ElevatedButton.icon(
-                      onPressed: () => _addWindow('settings_grid'),
-                      icon: const Icon(Icons.settings),
+                      onPressed: _toggleSettingsPanel,
+                      icon: Icon(_isSettingsPanelVisible ? Icons.close : Icons.settings),
                       label: const Text('Настройки'),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.white10,
+                        backgroundColor: _isSettingsPanelVisible ? Colors.redAccent.withOpacity(0.2) : Colors.white10,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                       ),
@@ -255,7 +265,44 @@ class _AppState extends State<App> {
                                   _buildTypeOption(
                                     icon: Icons.videocam_outlined,
                                     label: 'viewport_cam',
+                                    color: Colors.blueAccent,
                                     onTap: () => _addWindow('viewport_cam'),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        // Анимированная панель настроек
+                        AnimatedPositioned(
+                          duration: const Duration(milliseconds: 300),
+                          curve: Curves.easeInOutCubic,
+                          top: _isSettingsPanelVisible ? 10 : -200, // Выезжает сверху
+                          left: 0,
+                          right: 0,
+                          child: Center(
+                            child: Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: Colors.grey[850],
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: Colors.white10),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black54,
+                                    blurRadius: 20,
+                                    offset: Offset(0, 10),
+                                  ),
+                                ],
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  _buildTypeOption(
+                                    icon: Icons.grid_4x4,
+                                    label: 'settings_grid',
+                                    color: Colors.orangeAccent,
+                                    onTap: () => _addWindow('settings_grid'),
                                   ),
                                 ],
                               ),
@@ -277,6 +324,7 @@ class _AppState extends State<App> {
   Widget _buildTypeOption({
     required IconData icon,
     required String label,
+    required Color color,
     required VoidCallback onTap,
   }) {
     return InkWell(
@@ -287,7 +335,7 @@ class _AppState extends State<App> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 32, color: Colors.blueAccent),
+            Icon(icon, size: 32, color: color),
             const SizedBox(height: 8),
             Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
           ],
