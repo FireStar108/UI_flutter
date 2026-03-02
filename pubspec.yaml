@@ -37,6 +37,7 @@ dependencies:
   window_manager: ^0.5.1
   permission_handler: ^11.0.0
   camera_macos: ^0.0.9
+  shared_preferences: ^2.5.4
 
 dev_dependencies:
   flutter_test:

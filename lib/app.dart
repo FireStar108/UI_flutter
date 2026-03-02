@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'ui/grid_background.dart';
 import 'ui/window_item.dart';
+import 'core/grid_models.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:math' as math;
 
 
@@ -20,6 +22,27 @@ class _AppState extends State<App> {
   GridMode _currentGridMode = GridMode.system;
   Offset? _previewPosition;
   Size? _previewSize;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadGridMode();
+  }
+
+  Future<void> _loadGridMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    final modeIndex = prefs.getInt('grid_mode') ?? 0;
+    if (mounted) {
+      setState(() {
+        _currentGridMode = GridMode.values[modeIndex];
+      });
+    }
+  }
+
+  Future<void> _saveGridMode(GridMode mode) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('grid_mode', mode.index);
+  }
 
   void _addWindow(String type) {
     setState(() {
@@ -95,30 +118,55 @@ class _AppState extends State<App> {
     final RenderBox renderBox = context.findRenderObject() as RenderBox;
     final localCursor = renderBox.globalToLocal(cursorPosition);
 
-    final splitX = 10 / 16;
-    final splitY = 6 / 9;
+    final metadata = GridMetadata.fromMode(_currentGridMode);
+    
+    // Списки всех границ (включая 0 и 1)
+    final xBoundaries = [0.0, ...metadata.horizontalSplits, 1.0];
+    final yBoundaries = [0.0, ...metadata.verticalSplits, 1.0];
+    
+    // Сортируем на всякий случай
+    xBoundaries.sort();
+    yBoundaries.sort();
 
     final normalizedCursorX = localCursor.dx / areaSize.width;
     final normalizedCursorY = localCursor.dy / areaSize.height;
 
-    // Константа отступа (равна ширине сетки)
+    // Константа отступа
     const double gap = 3.0;
     final double padX = gap / areaSize.width;
     final double padY = gap / areaSize.height;
 
-    if (normalizedCursorX < splitX && normalizedCursorY < splitY) {
-      _previewPosition = Offset(padX, padY);
-      _previewSize = Size(splitX - 2 * padX, splitY - 2 * padY);
-    } else if (normalizedCursorX >= splitX && normalizedCursorY < splitY) {
-      _previewPosition = Offset(splitX + padX, padY);
-      _previewSize = Size(1 - splitX - 2 * padX, splitY - 2 * padY);
-    } else if (normalizedCursorX < splitX && normalizedCursorY >= splitY) {
-      _previewPosition = Offset(padX, splitY + padY);
-      _previewSize = Size(splitX - 2 * padX, 1 - splitY - 2 * padY);
-    } else {
-      _previewPosition = Offset(splitX + padX, splitY + padY);
-      _previewSize = Size(1 - splitX - 2 * padX, 1 - splitY - 2 * padY);
+    // Поиск текущей ячейки по X
+    double left = 0, right = 1;
+    for (int i = 0; i < xBoundaries.length - 1; i++) {
+      if (normalizedCursorX >= xBoundaries[i] && normalizedCursorX < xBoundaries[i + 1]) {
+        left = xBoundaries[i];
+        right = xBoundaries[i + 1];
+        break;
+      }
     }
+    // Если на самом краю 1.0
+    if (normalizedCursorX >= 1.0) {
+      left = xBoundaries[xBoundaries.length - 2];
+      right = 1.0;
+    }
+
+    // Поиск текущей ячейки по Y
+    double top = 0, bottom = 1;
+    for (int i = 0; i < yBoundaries.length - 1; i++) {
+      if (normalizedCursorY >= yBoundaries[i] && normalizedCursorY < yBoundaries[i + 1]) {
+        top = yBoundaries[i];
+        bottom = yBoundaries[i + 1];
+        break;
+      }
+    }
+    if (normalizedCursorY >= 1.0) {
+      top = yBoundaries[yBoundaries.length - 2];
+      bottom = 1.0;
+    }
+
+    _previewPosition = Offset(left + padX, top + padY);
+    _previewSize = Size(right - left - 2 * padX, bottom - top - 2 * padY);
   }
 
   void _handlePanEnd(WindowData data) {
@@ -234,6 +282,7 @@ class _AppState extends State<App> {
                             screenSize: workAreaSize,
                             onGridModeChanged: (mode) {
                               setState(() => _currentGridMode = mode);
+                              _saveGridMode(mode);
                             },
                             onPanUpdate: (details) => _handlePanUpdate(w, details, workAreaSize),
                             onResizeUpdate: (delta) => _handleResizeUpdate(w, delta, workAreaSize),

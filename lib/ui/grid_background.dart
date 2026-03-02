@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-
-enum GridMode { system, grid_2x2, grid_3x3, cinematic }
+import '../core/grid_models.dart';
 
 class GridBackground extends StatelessWidget {
   final GridMode mode;
@@ -25,49 +24,28 @@ class GridPainter extends CustomPainter {
       ..strokeWidth = 1.0
       ..style = PaintingStyle.stroke;
 
-    final dashedPaint = Paint()
-      ..color = Colors.white10
-      ..strokeWidth = 1.0
-      ..style = PaintingStyle.stroke;
+    final metadata = GridMetadata.fromMode(mode);
+    const int dashWidth = 8;
+    const int dashSpace = 8;
 
-    const dashWidth = 8;
-    const dashSpace = 8;
+    // Отрисовка вертикальных линий
+    for (final xRatio in metadata.horizontalSplits) {
+      final x = size.width * xRatio;
+      _drawDashedLine(canvas, Offset(x, 0), Offset(x, size.height), paint, dashWidth, dashSpace);
+    }
 
+    // Отрисовка горизонтальных линий
+    for (final yRatio in metadata.verticalSplits) {
+      final y = size.height * yRatio;
+      _drawDashedLine(canvas, Offset(0, y), Offset(size.width, y), paint, dashWidth, dashSpace);
+    }
+
+    // Отрисовка крестиков на пересечениях (только для системной или ключевых точек)
     if (mode == GridMode.system) {
-      // Системная сетка (как была раньше)
-      final intersectionX = size.width * (10 / 16);
-      final intersectionY = size.height * (6 / 9);
-
-      _drawDashedLine(canvas, Offset(intersectionX, 0), Offset(intersectionX, size.height), paint, dashWidth, dashSpace);
-      _drawDashedLine(canvas, Offset(0, intersectionY), Offset(size.width, intersectionY), paint, dashWidth, dashSpace);
-      
-      // Крестик
-      _drawCross(canvas, Offset(intersectionX, intersectionY));
-    } else if (mode == GridMode.grid_2x2) {
-      _drawRegularGrid(canvas, size, 2, 2, paint);
-    } else if (mode == GridMode.grid_3x3) {
-      _drawRegularGrid(canvas, size, 3, 3, paint);
-    } else if (mode == GridMode.cinematic) {
-      // Cinematic: упростим до 4x4 или специфических линий (например, 21:9)
-      _drawRegularGrid(canvas, size, 4, 4, paint);
-      // Добавим рамки сверху/снизу
-      final topY = size.height * 0.12;
-      final bottomY = size.height * 0.88;
-      canvas.drawLine(Offset(0, topY), Offset(size.width, topY), paint..color = Colors.white38);
-      canvas.drawLine(Offset(0, bottomY), Offset(size.width, bottomY), paint..color = Colors.white38);
+      _drawCross(canvas, Offset(size.width * (10 / 16), size.height * (6 / 9)));
     }
   }
 
-  void _drawRegularGrid(Canvas canvas, Size size, int rows, int cols, Paint paint) {
-    for (int i = 1; i < rows; i++) {
-      final y = size.height * (i / rows);
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
-    }
-    for (int i = 1; i < cols; i++) {
-      final x = size.width * (i / cols);
-      canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
-    }
-  }
 
   void _drawCross(Canvas canvas, Offset center) {
     final crossPaint = Paint()
