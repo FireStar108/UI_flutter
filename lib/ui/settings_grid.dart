@@ -338,64 +338,91 @@ class _SettingsGridState extends State<SettingsGrid> {
     final double posRatio = splits[_activeMenuLineIndex!];
     final bool isBorder = _activeMenuLineIndex == 0 || _activeMenuLineIndex == splits.length - 1;
 
+    // Пытаемся центрировать меню относительно линии
+    // Для вертикальных линий меню будет ВДОЛЬ линии (вертикальное), для горизонтальных - ВДОЛЬ линии (горизонтальное)
     return Positioned(
-      left: _isVerticalMenu ? posRatio * size.width + 10 : size.width / 2 - 40,
-      top: _isVerticalMenu ? size.height / 2 - 40 : posRatio * size.height + 10,
+      left: _isVerticalMenu ? posRatio * size.width - 20 : size.width / 2 - 60,
+      top: _isVerticalMenu ? size.height / 2 - 60 : posRatio * size.height - 20,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+        padding: const EdgeInsets.all(4),
         decoration: BoxDecoration(
           color: Colors.grey[900],
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.orangeAccent),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: Colors.orangeAccent, width: 1.5),
           boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.5),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
+            BoxShadow(color: Colors.black54, blurRadius: 12, offset: const Offset(0, 6)),
+          ],
+        ),
+        child: _isVerticalMenu 
+          ? Column(
+              mainAxisSize: MainAxisSize.min,
+              children: _buildMenuButtons(splits, isBorder),
+            )
+          : Row(
+              mainAxisSize: MainAxisSize.min,
+              children: _buildMenuButtons(splits, isBorder),
             ),
-          ],
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // ПЛЮСИК (Добавить линию в следующую ячейку)
-            if (_activeMenuLineIndex! < splits.length - 1)
-              _buildMenuIcon(
-                icon: Icons.add_circle_outline_rounded,
-                color: Colors.greenAccent,
-                onTap: () {
-                  setState(() {
-                    _isPlacingLine = true;
-                    _placingVertical = _isVerticalMenu;
-                    _placementMin = splits[_activeMenuLineIndex!] + 0.02;
-                    _placementMax = splits[_activeMenuLineIndex! + 1] - 0.02;
-                    _ghostPosition = (_placementMin + _placementMax) / 2;
-                    _activeMenuLineIndex = null;
-                  });
-                },
-              ),
-            if (!isBorder) ...[
-              if (_activeMenuLineIndex! < splits.length - 1) const SizedBox(width: 4),
-              // МИНУС (Удалить текущую линию)
-              _buildMenuIcon(
-                icon: Icons.remove_circle_outline_rounded,
-                color: Colors.redAccent,
-                onTap: () {
-                  setState(() {
-                    if (_isVerticalMenu) {
-                      _customMetadata.horizontalSplits.removeAt(_activeMenuLineIndex! - 1);
-                    } else {
-                      _customMetadata.verticalSplits.removeAt(_activeMenuLineIndex! - 1);
-                    }
-                    _activeMenuLineIndex = null;
-                  });
-                },
-              ),
-            ],
-          ],
-        ),
       ),
     );
+  }
+
+  List<Widget> _buildMenuButtons(List<double> splits, bool isBorder) {
+    final int idx = _activeMenuLineIndex!;
+    return [
+      // Плюс с одной стороны (Слева или Сверху)
+      if (idx > 0)
+        _buildMenuIcon(
+          icon: Icons.add_circle_outline_rounded,
+          color: Colors.greenAccent,
+          onTap: () => _addSmartLine(splits[idx-1], splits[idx]),
+        ),
+      
+      if (idx > 0 && idx < splits.length - 1) const SizedBox(width: 4, height: 4),
+
+      // Кнопка удаления (по центру, если не граница)
+      if (!isBorder)
+        _buildMenuIcon(
+          icon: Icons.delete_outline_rounded,
+          color: Colors.redAccent,
+          onTap: () {
+            setState(() {
+              if (_isVerticalMenu) {
+                _customMetadata.horizontalSplits.removeAt(idx - 1);
+              } else {
+                _customMetadata.verticalSplits.removeAt(idx - 1);
+              }
+              _activeMenuLineIndex = null;
+            });
+          },
+        )
+      else 
+        // Если это граница, то в центре просто иконка запрета или ничего
+        const Padding(
+          padding: EdgeInsets.all(8.0),
+          child: Icon(Icons.lock_outline_rounded, color: Colors.white24, size: 20),
+        ),
+
+      if (idx < splits.length - 1) const SizedBox(width: 4, height: 4),
+
+      // Плюс с другой стороны (Справа или Снизу)
+      if (idx < splits.length - 1)
+        _buildMenuIcon(
+          icon: Icons.add_circle_outline_rounded,
+          color: Colors.greenAccent,
+          onTap: () => _addSmartLine(splits[idx], splits[idx+1]),
+        ),
+    ];
+  }
+
+  void _addSmartLine(double min, double max) {
+    setState(() {
+      _isPlacingLine = true;
+      _placingVertical = _isVerticalMenu;
+      _placementMin = min + 0.01;
+      _placementMax = max - 0.01;
+      _ghostPosition = (min + max) / 2;
+      _activeMenuLineIndex = null;
+    });
   }
 
   Widget _buildMenuIcon({required IconData icon, required Color color, required VoidCallback onTap}) {

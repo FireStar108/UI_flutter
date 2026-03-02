@@ -24,7 +24,7 @@ class GridPainter extends CustomPainter {
     final metadata = GridMetadata.fromMode(mode, customData: customMetadata);
     
     final paint = Paint()
-      ..color = metadata.color.withValues(alpha: 0.25)
+      ..color = metadata.color.withValues(alpha: 0.6)
       ..strokeWidth = 1.0
       ..style = PaintingStyle.stroke;
     final int dashWidth = 8;
