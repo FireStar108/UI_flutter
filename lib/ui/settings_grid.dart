@@ -140,7 +140,7 @@ class _SettingsGridState extends State<SettingsGrid> {
             border: Border.all(color: Colors.white10),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.5),
+                color: Colors.black.withOpacity(0.5),
                 blurRadius: 20,
                 offset: const Offset(0, 10),
               ),
@@ -231,7 +231,7 @@ class _SettingsGridState extends State<SettingsGrid> {
                 child: Center(
                   child: Container(
                     width: 2,
-                    color: Colors.orangeAccent.withValues(alpha: 0.5),
+                    color: Colors.orangeAccent.withOpacity(0.5),
                   ),
                 ),
               ),
@@ -261,7 +261,7 @@ class _SettingsGridState extends State<SettingsGrid> {
                 child: Center(
                   child: Container(
                     height: 2,
-                    color: Colors.orangeAccent.withValues(alpha: 0.5),
+                    color: Colors.orangeAccent.withOpacity(0.5),
                   ),
                 ),
               ),
@@ -393,7 +393,7 @@ class _SettingsGridState extends State<SettingsGrid> {
               _buildButton(
                 label: 'СБРОСИТЬ',
                 icon: Icons.refresh_rounded,
-                color: Colors.orangeAccent.withValues(alpha: 0.1),
+                color: Colors.orangeAccent.withOpacity(0.1),
                 onPressed: () {
                   setState(() {
                     final currentMode = GridMode.fromModeString(_selectedTemplate?.id ?? 'system');
@@ -403,7 +403,7 @@ class _SettingsGridState extends State<SettingsGrid> {
                 },
               ),
             ],
-            const Spacer(),
+            const SizedBox(width: 32),
             _buildButton(
               label: 'ПРИМЕНИТЬ СЕТКУ',
               icon: Icons.check_circle_outline_rounded,
@@ -462,10 +462,10 @@ class _SettingsGridState extends State<SettingsGrid> {
         margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: isSelected ? Colors.orangeAccent.withValues(alpha: 0.1) : Colors.transparent,
+          color: isSelected ? Colors.orangeAccent.withOpacity(0.1) : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
-            color: isSelected ? Colors.orangeAccent.withValues(alpha: 0.5) : Colors.transparent,
+            color: isSelected ? Colors.orangeAccent.withOpacity(0.5) : Colors.transparent,
           ),
         ),
         child: Column(
