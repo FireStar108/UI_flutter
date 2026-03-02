@@ -30,6 +30,14 @@ class _SettingsGridState extends State<SettingsGrid> {
   bool _isEditing = false;
   GridMetadata _customMetadata = GridMetadata(horizontalSplits: [0.5], verticalSplits: [0.5]);
 
+  // Новые состояния для рефакторинга меню и призрачных линий
+  int? _activeMenuLineIndex; // Индекс линии с открытым меню
+  bool _isVerticalMenu = false; // Вертикальная или горизонтальная линия
+  bool _isPlacingLine = false; // Режим размещения новой линии
+  bool _placingVertical = false; // Тип размещаемой линии
+  double _ghostPosition = 0.5; // Позиция призрака (0..1)
+  double _placementMin = 0.01; // Минимум для размещения
+  double _placementMax = 0.99; // Максимум для размещения
   @override
   void initState() {
     super.initState();
@@ -189,54 +197,191 @@ class _SettingsGridState extends State<SettingsGrid> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final size = Size(constraints.maxWidth, constraints.maxHeight);
-        
-        return Stack(
-          children: [
-            // Сама отрисовка линий
-            CustomPaint(
-              size: size,
-              painter: GridPainter(mode: mode, customMetadata: metadata),
+
+        return MouseRegion(
+          onHover: (event) {
+            if (_isPlacingLine) {
+              setState(() {
+                final local = event.localPosition;
+                _ghostPosition = (_placingVertical ? local.dx / size.width : local.dy / size.height)
+                    .clamp(_placementMin, _placementMax);
+              });
+            }
+          },
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTapUp: (details) {
+              if (_isPlacingLine) {
+                setState(() {
+                  if (_placingVertical) {
+                    _customMetadata.horizontalSplits.add(_ghostPosition);
+                    _customMetadata.horizontalSplits.sort();
+                  } else {
+                    _customMetadata.verticalSplits.add(_ghostPosition);
+                    _customMetadata.verticalSplits.sort();
+                  }
+                  _isPlacingLine = false;
+                });
+              } else {
+                setState(() => _activeMenuLineIndex = null);
+              }
+            },
+            child: Stack(
+              children: [
+                // Сама отрисовка линий
+                CustomPaint(
+                  size: size,
+                  painter: GridPainter(mode: mode, customMetadata: metadata),
+                ),
+                // Призрачная линия
+                if (_isPlacingLine) _buildGhostLine(size),
+                // Интерактивные линии (перетаскивание)
+                if (_isEditing) ..._buildDraggableLines(metadata, size),
+                // Меню на линии
+                if (_isEditing && _activeMenuLineIndex != null) _buildLineMenu(metadata, size),
+              ],
             ),
-            // Интерактивные линии (перетаскивание)
-            if (_isEditing) ..._buildDraggableLines(metadata, size),
-            // Кнопки добавления (только в режиме редактирования)
-            if (_isEditing) ..._buildCellButtons(metadata, size),
-          ],
+          ),
         );
       },
+    );
+  }
+
+  Widget _buildGhostLine(Size size) {
+    if (_placingVertical) {
+      return Positioned(
+        left: _ghostPosition * size.width - 1,
+        top: 0,
+        bottom: 0,
+        child: Container(width: 2, color: Colors.orangeAccent.withOpacity(0.8)),
+      );
+    } else {
+      return Positioned(
+        top: _ghostPosition * size.height - 1,
+        left: 0,
+        right: 0,
+        child: Container(height: 2, color: Colors.orangeAccent.withOpacity(0.8)),
+      );
+    }
+  }
+
+  Widget _buildLineMenu(GridMetadata metadata, Size size) {
+    final splits = _isVerticalMenu ? [0.0, ...metadata.horizontalSplits, 1.0] : [0.0, ...metadata.verticalSplits, 1.0];
+    final double posRatio = splits[_activeMenuLineIndex!];
+    final bool isBorder = _activeMenuLineIndex == 0 || _activeMenuLineIndex == splits.length - 1;
+
+    return Positioned(
+      left: _isVerticalMenu ? posRatio * size.width + 10 : size.width / 2 - 40,
+      top: _isVerticalMenu ? size.height / 2 - 40 : posRatio * size.height + 10,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+        decoration: BoxDecoration(
+          color: Colors.grey[900],
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.orangeAccent),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.5),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // ПЛЮСИК (Добавить линию в следующую ячейку)
+            if (_activeMenuLineIndex! < splits.length - 1)
+              _buildMenuIcon(
+                icon: Icons.add_circle_outline_rounded,
+                color: Colors.greenAccent,
+                onTap: () {
+                  setState(() {
+                    _isPlacingLine = true;
+                    _placingVertical = _isVerticalMenu;
+                    _placementMin = splits[_activeMenuLineIndex!] + 0.02;
+                    _placementMax = splits[_activeMenuLineIndex! + 1] - 0.02;
+                    _ghostPosition = (_placementMin + _placementMax) / 2;
+                    _activeMenuLineIndex = null;
+                  });
+                },
+              ),
+            if (!isBorder) ...[
+              if (_activeMenuLineIndex! < splits.length - 1) const SizedBox(width: 4),
+              // МИНУС (Удалить текущую линию)
+              _buildMenuIcon(
+                icon: Icons.remove_circle_outline_rounded,
+                color: Colors.redAccent,
+                onTap: () {
+                  setState(() {
+                    if (_isVerticalMenu) {
+                      _customMetadata.horizontalSplits.removeAt(_activeMenuLineIndex! - 1);
+                    } else {
+                      _customMetadata.verticalSplits.removeAt(_activeMenuLineIndex! - 1);
+                    }
+                    _activeMenuLineIndex = null;
+                  });
+                },
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMenuIcon({required IconData icon, required Color color, required VoidCallback onTap}) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.all(4.0),
+        child: Icon(icon, color: color, size: 24),
+      ),
     );
   }
 
   List<Widget> _buildDraggableLines(GridMetadata metadata, Size size) {
     List<Widget> handles = [];
 
-    // Вертикальные линии (двигаем по X)
-    for (int i = 0; i < metadata.horizontalSplits.length; i++) {
-      final x = metadata.horizontalSplits[i] * size.width;
+    // --- ВЕРТИКАЛЬНЫЕ ---
+    final vSplits = [0.0, ...metadata.horizontalSplits, 1.0];
+    for (int i = 0; i < vSplits.length; i++) {
+      final x = vSplits[i] * size.width;
+      final bool isBorder = i == 0 || i == vSplits.length - 1;
+      final int splitIndex = i - 1; // Индекс в metadata.horizontalSplits
+
       handles.add(
         Positioned(
-          left: x - 15,
+          left: x - 20,
           top: 0,
           bottom: 0,
           child: GestureDetector(
-            onHorizontalDragUpdate: (details) {
+            onTap: () {
               setState(() {
-                double newX = (details.localPosition.dx + x - 15) / size.width;
-                // Ограничения: не выходить за соседние линии
-                double minBound = (i == 0) ? 0.01 : metadata.horizontalSplits[i - 1] + 0.02;
-                double maxBound = (i == metadata.horizontalSplits.length - 1)
+                _activeMenuLineIndex = i;
+                _isVerticalMenu = true;
+              });
+            },
+            onHorizontalDragUpdate: isBorder ? null : (details) {
+              setState(() {
+                double deltaX = details.delta.dx / size.width;
+                double newX = metadata.horizontalSplits[splitIndex] + deltaX;
+                
+                double minBound = (splitIndex == 0) ? 0.01 : metadata.horizontalSplits[splitIndex - 1] + 0.02;
+                double maxBound = (splitIndex == metadata.horizontalSplits.length - 1)
                     ? 0.99
-                    : metadata.horizontalSplits[i + 1] - 0.02;
-                _customMetadata.horizontalSplits[i] = newX.clamp(minBound, maxBound);
+                    : metadata.horizontalSplits[splitIndex + 1] - 0.02;
+                
+                _customMetadata.horizontalSplits[splitIndex] = newX.clamp(minBound, maxBound);
               });
             },
             child: Container(
-              width: 30,
+              width: 40,
               color: Colors.transparent,
               child: Center(
                 child: Container(
-                  width: 2,
-                  color: Colors.orangeAccent.withOpacity(0.5),
+                  width: isBorder ? 1 : 2,
+                  color: isBorder ? Colors.white12 : Colors.orangeAccent.withOpacity(0.5),
                 ),
               ),
             ),
@@ -245,33 +390,45 @@ class _SettingsGridState extends State<SettingsGrid> {
       );
     }
 
-    // Горизонтальные линии (двигаем по Y)
-    for (int i = 0; i < metadata.verticalSplits.length; i++) {
-      final y = metadata.verticalSplits[i] * size.height;
+    // --- ГОРИЗОНТАЛЬНЫЕ ---
+    final hSplits = [0.0, ...metadata.verticalSplits, 1.0];
+    for (int i = 0; i < hSplits.length; i++) {
+      final y = hSplits[i] * size.height;
+      final bool isBorder = i == 0 || i == hSplits.length - 1;
+      final int splitIndex = i - 1;
+
       handles.add(
         Positioned(
-          top: y - 15,
+          top: y - 20,
           left: 0,
           right: 0,
           child: GestureDetector(
-            onVerticalDragUpdate: (details) {
+            onTap: () {
               setState(() {
-                double newY = (details.localPosition.dy + y - 15) / size.height;
-                // Ограничения: не выходить за соседние линии
-                double minBound = (i == 0) ? 0.01 : metadata.verticalSplits[i - 1] + 0.02;
-                double maxBound = (i == metadata.verticalSplits.length - 1)
+                _activeMenuLineIndex = i;
+                _isVerticalMenu = false;
+              });
+            },
+            onVerticalDragUpdate: isBorder ? null : (details) {
+              setState(() {
+                double deltaY = details.delta.dy / size.height;
+                double newY = metadata.verticalSplits[splitIndex] + deltaY;
+
+                double minBound = (splitIndex == 0) ? 0.01 : metadata.verticalSplits[splitIndex - 1] + 0.02;
+                double maxBound = (splitIndex == metadata.verticalSplits.length - 1)
                     ? 0.99
-                    : metadata.verticalSplits[i + 1] - 0.02;
-                _customMetadata.verticalSplits[i] = newY.clamp(minBound, maxBound);
+                    : metadata.verticalSplits[splitIndex + 1] - 0.02;
+
+                _customMetadata.verticalSplits[splitIndex] = newY.clamp(minBound, maxBound);
               });
             },
             child: Container(
-              height: 30,
+              height: 40,
               color: Colors.transparent,
               child: Center(
                 child: Container(
-                  height: 2,
-                  color: Colors.orangeAccent.withOpacity(0.5),
+                  height: isBorder ? 1 : 2,
+                  color: isBorder ? Colors.white12 : Colors.orangeAccent.withOpacity(0.5),
                 ),
               ),
             ),
@@ -281,90 +438,6 @@ class _SettingsGridState extends State<SettingsGrid> {
     }
 
     return handles;
-  }
-
-  List<Widget> _buildCellButtons(GridMetadata metadata, Size size) {
-    final xBounds = [0.0, ...metadata.horizontalSplits, 1.0]..sort();
-    final yBounds = [0.0, ...metadata.verticalSplits, 1.0]..sort();
-    List<Widget> buttons = [];
-
-    for (int ix = 0; ix < xBounds.length - 1; ix++) {
-      for (int iy = 0; iy < yBounds.length - 1; iy++) {
-        final left = xBounds[ix] * size.width;
-        final right = xBounds[ix + 1] * size.width;
-        final top = yBounds[iy] * size.height;
-        final bottom = yBounds[iy + 1] * size.height;
-
-        final centerX = (left + right) / 2;
-        final centerY = (top + bottom) / 2;
-
-        // Кнопки рядом горизонтально
-        buttons.add(
-          Positioned(
-            left: centerX - 34,
-            top: centerY - 16,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Вертикальное деление (view_column)
-                _buildAddButton(
-                  icon: Icons.view_column_rounded,
-                  onPressed: () {
-                    setState(() {
-                      final newSplit = (xBounds[ix] + xBounds[ix + 1]) / 2;
-                      _customMetadata.horizontalSplits.add(newSplit);
-                      _customMetadata.horizontalSplits.sort();
-                    });
-                  },
-                ),
-                const SizedBox(width: 4),
-                // Горизонтальное деление (view_stream)
-                _buildAddButton(
-                  icon: Icons.view_stream_rounded,
-                  onPressed: () {
-                    setState(() {
-                      final newSplit = (yBounds[iy] + yBounds[iy + 1]) / 2;
-                      _customMetadata.verticalSplits.add(newSplit);
-                      _customMetadata.verticalSplits.sort();
-                    });
-                  },
-                ),
-              ],
-            ),
-          ),
-        );
-      }
-    }
-    return buttons;
-  }
-
-  Widget _buildAddButton({
-    required IconData icon,
-    required VoidCallback onPressed,
-  }) {
-    return GestureDetector(
-      onTap: onPressed,
-      child: Container(
-        width: 32,
-        height: 32,
-        decoration: BoxDecoration(
-          color: Colors.orangeAccent,
-          borderRadius: BorderRadius.circular(8),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.3),
-              blurRadius: 4,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Icon(
-          icon,
-          size: 18,
-          color: Colors.black,
-        ),
-      ),
-    );
   }
 
 
