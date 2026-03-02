@@ -2,19 +2,7 @@ import 'package:flutter/material.dart';
 import '../core/grid_models.dart';
 import 'grid_background.dart';
 
-class GridTemplate {
-  final String id;
-  final String name;
-  final IconData icon;
-  final String description;
-
-  GridTemplate({
-    required this.id,
-    required this.name,
-    required this.icon,
-    this.description = '',
-  });
-}
+// GridMetadata is now used directly as a template
 
 class SettingsGrid extends StatefulWidget {
   final Function(GridMode mode, GridMetadata? metadata)? onApply;
@@ -25,49 +13,33 @@ class SettingsGrid extends StatefulWidget {
 }
 
 class _SettingsGridState extends State<SettingsGrid> {
-  late List<GridTemplate> _templates;
-  GridTemplate? _selectedTemplate;
+  late List<GridMetadata> _templates;
+  GridMetadata? _selectedTemplate;
+  GridMetadata? _lastAppliedMetadata; // Для сброса
+  
   bool _isEditing = false;
-  GridMetadata _customMetadata = GridMetadata(horizontalSplits: [0.5], verticalSplits: [0.5]);
+  GridMetadata _customMetadata = GridMetadata.fromMode(GridMode.system); // Текущее правка
 
   // Новые состояния для рефакторинга меню и призрачных линий
-  int? _activeMenuLineIndex; // Индекс линии с открытым меню
-  bool _isVerticalMenu = false; // Вертикальная или горизонтальная линия
-  bool _isPlacingLine = false; // Режим размещения новой линии
-  bool _placingVertical = false; // Тип размещаемой линии
-  double _ghostPosition = 0.5; // Позиция призрака (0..1)
-  double _placementMin = 0.01; // Минимум для размещения
-  double _placementMax = 0.99; // Максимум для размещения
+  int? _activeMenuLineIndex; 
+  bool _isVerticalMenu = false; 
+  bool _isPlacingLine = false; 
+  bool _placingVertical = false; 
+  double _ghostPosition = 0.5; 
+  double _placementMin = 0.01; 
+  double _placementMax = 0.99;
+
   @override
   void initState() {
     super.initState();
     _templates = [
-      GridTemplate(
-        id: 'system',
-        name: 'Системный',
-        icon: Icons.settings_input_component,
-        description: 'Стандартная системная сетка по умолчанию.',
-      ),
-      GridTemplate(
-        id: 'grid_2x2',
-        name: 'Сетка 2x2',
-        icon: Icons.grid_view_rounded,
-        description: 'Равномерное деление экрана на 4 зоны.',
-      ),
-      GridTemplate(
-        id: 'grid_3x3',
-        name: 'Сетка 3x3',
-        icon: Icons.grid_on_rounded,
-        description: 'Классическая сетка из 9 сегментов.',
-      ),
-      GridTemplate(
-        id: 'cinematic',
-        name: 'Cinematic',
-        icon: Icons.movie_filter_outlined,
-        description: 'Оптимизировано для мониторинга видеопотоков.',
-      ),
+      GridMetadata.fromMode(GridMode.system),
+      GridMetadata.fromMode(GridMode.grid_2x2),
+      GridMetadata.fromMode(GridMode.grid_3x3),
     ];
     _selectedTemplate = _templates.first;
+    _customMetadata = _selectedTemplate!.copyWith();
+    _lastAppliedMetadata = _selectedTemplate!.copyWith();
   }
 
   @override
@@ -76,9 +48,9 @@ class _SettingsGridState extends State<SettingsGrid> {
       color: const Color(0xFF1E1E1E),
       child: Row(
         children: [
-          // ЛЕВАЯ ЧАСТЬ: ПРЕВЬЮ И КНОПКИ (flex 5)
+          // ЛЕВАЯ ЧАСТЬ: ПРЕВЬЮ И КНОПКИ (flex 4)
           Expanded(
-            flex: 5,
+            flex: 4,
             child: Container(
               decoration: const BoxDecoration(
                 border: Border(right: BorderSide(color: Colors.white10)),
@@ -87,8 +59,29 @@ class _SettingsGridState extends State<SettingsGrid> {
                 children: [
                   Expanded(
                     child: Padding(
-                      padding: const EdgeInsets.all(24.0),
-                      child: _buildPreviewArea(),
+                      padding: const EdgeInsets.all(32.0),
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          // Адаптивное превью 16:9
+                          double width = constraints.maxWidth;
+                          double height = constraints.maxHeight;
+                          double targetWidth = width;
+                          double targetHeight = width * (9 / 16);
+
+                          if (targetHeight > height) {
+                            targetHeight = height;
+                            targetWidth = height * (16 / 9);
+                          }
+
+                          return Center(
+                            child: SizedBox(
+                              width: targetWidth,
+                              height: targetHeight,
+                              child: _buildPreviewArea(),
+                            ),
+                          );
+                        },
+                      ),
                     ),
                   ),
                   _buildActionButtons(),
@@ -96,36 +89,34 @@ class _SettingsGridState extends State<SettingsGrid> {
               ),
             ),
           ),
-          // ПРАВАЯ ЧАСТЬ: СПИСОК ШАБЛОНОВ (flex 1)
+          // ПРАВАЯ ЧАСТЬ: НАСТРОЙКИ (flex 2)
           Expanded(
-            flex: 1,
+            flex: 2,
             child: Container(
               color: Colors.black.withValues(alpha: 0.2),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Padding(
-                    padding: EdgeInsets.all(12.0),
-                    child: Text(
-                      'ШАБЛОНЫ',
-                      style: TextStyle(
-                        color: Colors.white38,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1,
-                      ),
-                    ),
-                  ),
+                  _buildSidebarHeader('ШАБЛОНЫ'),
                   Expanded(
                     child: ListView.builder(
-                      itemCount: _templates.length,
+                      itemCount: _templates.length + 1,
                       itemBuilder: (context, index) {
+                        if (index == _templates.length) {
+                          return _buildAddTemplateButton();
+                        }
                         final template = _templates[index];
                         final isSelected = _selectedTemplate?.id == template.id;
                         return _buildTemplateItem(template, isSelected);
                       },
                     ),
                   ),
+                  const Divider(color: Colors.white10, height: 1),
+                  if (_isEditing) ...[
+                    _buildSidebarHeader('СВОЙСТВА'),
+                    _buildSidebarEditor(),
+                    const SizedBox(height: 20),
+                  ],
                 ],
               ),
             ),
@@ -135,65 +126,72 @@ class _SettingsGridState extends State<SettingsGrid> {
     );
   }
 
-  Widget _buildPreviewArea() {
-    return Center(
-      child: FittedBox(
-        fit: BoxFit.contain,
-        child: Container(
-          width: 400,
-          height: 225,
-          decoration: BoxDecoration(
-            color: Colors.black,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.white10),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.5),
-                blurRadius: 20,
-                offset: const Offset(0, 10),
-              ),
-            ],
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: Stack(
-              children: [
-                _buildInteractiveGrid(),
-                if (!_isEditing)
-                  Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          _selectedTemplate?.icon,
-                          size: 48,
-                          color: Colors.white10,
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          _selectedTemplate?.name.toUpperCase() ?? '',
-                          style: const TextStyle(
-                            color: Colors.white24,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 2,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-              ],
-            ),
-          ),
+  Widget _buildSidebarHeader(String title) {
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Text(
+        title,
+        style: const TextStyle(
+          color: Colors.white38,
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+          letterSpacing: 1.5,
         ),
       ),
     );
   }
 
-  Widget _buildInteractiveGrid() {
-    final mode = _isEditing ? GridMode.custom : GridMode.fromModeString(_selectedTemplate?.id ?? 'system');
-    final metadata = _isEditing ? _customMetadata : GridMetadata.fromMode(mode);
+  Widget _buildPreviewArea() {
+    final metadata = _isEditing ? _customMetadata : _selectedTemplate!;
 
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.black,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white10),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.5),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Stack(
+          children: [
+            _buildInteractiveGrid(metadata),
+            if (!_isEditing)
+              Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      metadata.icon,
+                      size: 48,
+                      color: Colors.white.withValues(alpha: 0.05),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      metadata.name.toUpperCase(),
+                      style: const TextStyle(
+                        color: Colors.white24,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 2,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInteractiveGrid(GridMetadata metadata) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final size = Size(constraints.maxWidth, constraints.maxHeight);
@@ -231,8 +229,15 @@ class _SettingsGridState extends State<SettingsGrid> {
                 // Сама отрисовка линий
                 CustomPaint(
                   size: size,
-                  painter: GridPainter(mode: mode, customMetadata: metadata),
+                  painter: GridPainter(
+                    mode: _isEditing ? GridMode.custom : GridMode.system,
+                    customMetadata: metadata,
+                  ),
                 ),
+                // Кнопки для пустой сетки
+                if (_isEditing && metadata.horizontalSplits.isEmpty && metadata.verticalSplits.isEmpty && !_isPlacingLine)
+                  _buildStartButtons(size),
+                
                 // Призрачная линия
                 if (_isPlacingLine) _buildGhostLine(size),
                 // Интерактивные линии (перетаскивание)
@@ -247,20 +252,83 @@ class _SettingsGridState extends State<SettingsGrid> {
     );
   }
 
+  Widget _buildStartButtons(Size size) {
+    return Center(
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _buildBigAddButton(
+            icon: Icons.view_column_rounded,
+            label: 'ВЕРТИКАЛЬ',
+            onTap: () {
+              setState(() {
+                _isPlacingLine = true;
+                _placingVertical = true;
+                _placementMin = 0.05;
+                _placementMax = 0.95;
+                _ghostPosition = 0.5;
+              });
+            },
+          ),
+          const SizedBox(width: 20),
+          _buildBigAddButton(
+            icon: Icons.view_stream_rounded,
+            label: 'ГОРИЗОНТАЛЬ',
+            onTap: () {
+              setState(() {
+                _isPlacingLine = true;
+                _placingVertical = false;
+                _placementMin = 0.05;
+                _placementMax = 0.95;
+                _ghostPosition = 0.5;
+              });
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBigAddButton({required IconData icon, required String label, required VoidCallback onTap}) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.05),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white10),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: Colors.orangeAccent, size: 32),
+            const SizedBox(height: 8),
+            Text(
+              label,
+              style: const TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildGhostLine(Size size) {
     if (_placingVertical) {
       return Positioned(
         left: _ghostPosition * size.width - 1,
         top: 0,
         bottom: 0,
-        child: Container(width: 2, color: Colors.orangeAccent.withOpacity(0.8)),
+        child: Container(width: 2, color: Colors.orangeAccent.withValues(alpha: 0.8)),
       );
     } else {
       return Positioned(
         top: _ghostPosition * size.height - 1,
         left: 0,
         right: 0,
-        child: Container(height: 2, color: Colors.orangeAccent.withOpacity(0.8)),
+        child: Container(height: 2, color: Colors.orangeAccent.withValues(alpha: 0.8)),
       );
     }
   }
@@ -281,7 +349,7 @@ class _SettingsGridState extends State<SettingsGrid> {
           border: Border.all(color: Colors.orangeAccent),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.5),
+              color: Colors.black.withValues(alpha: 0.5),
               blurRadius: 10,
               offset: const Offset(0, 4),
             ),
@@ -381,7 +449,7 @@ class _SettingsGridState extends State<SettingsGrid> {
               child: Center(
                 child: Container(
                   width: isBorder ? 1 : 2,
-                  color: isBorder ? Colors.white12 : Colors.orangeAccent.withOpacity(0.5),
+                  color: isBorder ? Colors.white12 : Colors.orangeAccent.withValues(alpha: 0.5),
                 ),
               ),
             ),
@@ -428,7 +496,7 @@ class _SettingsGridState extends State<SettingsGrid> {
               child: Center(
                 child: Container(
                   height: isBorder ? 1 : 2,
-                  color: isBorder ? Colors.white12 : Colors.orangeAccent.withOpacity(0.5),
+                  color: isBorder ? Colors.white12 : Colors.orangeAccent.withValues(alpha: 0.5),
                 ),
               ),
             ),
@@ -441,71 +509,239 @@ class _SettingsGridState extends State<SettingsGrid> {
   }
 
 
+  Widget _buildTemplateItem(GridMetadata template, bool isSelected) {
+    return InkWell(
+      onTap: () {
+        setState(() {
+          _selectedTemplate = template;
+          _isEditing = false;
+          _customMetadata = template.copyWith();
+          _lastAppliedMetadata = template.copyWith();
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.orangeAccent.withValues(alpha: 0.1) : Colors.transparent,
+          border: Border(
+            left: BorderSide(
+              color: isSelected ? Colors.orangeAccent : Colors.transparent,
+              width: 3,
+            ),
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              template.icon,
+              size: 20,
+              color: isSelected ? Colors.orangeAccent : Colors.white38,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                template.name.toUpperCase(),
+                style: TextStyle(
+                  color: isSelected ? Colors.white : Colors.white60,
+                  fontSize: 11,
+                  fontWeight: isSelected ? FontWeight.w900 : FontWeight.normal,
+                  letterSpacing: 1,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAddTemplateButton() {
+    return InkWell(
+      onTap: _showAddTemplateDialog,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: const Row(
+          children: [
+            Icon(Icons.add_rounded, size: 20, color: Colors.greenAccent),
+            SizedBox(width: 12),
+            Text(
+              'НОВЫЙ ШАБЛОН',
+              style: TextStyle(
+                color: Colors.greenAccent,
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showAddTemplateDialog() {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E1E),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('НОВЫЙ ШАБЛОН', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 1)),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          style: const TextStyle(color: Colors.white),
+          decoration: const InputDecoration(
+            labelText: 'НАЗВАНИЕ',
+            labelStyle: TextStyle(color: Colors.white38, fontSize: 10),
+            enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white10)),
+            focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.orangeAccent)),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('ОТМЕНА', style: TextStyle(color: Colors.white38, fontSize: 11)),
+          ),
+          TextButton(
+            onPressed: () {
+              if (controller.text.isNotEmpty) {
+            final newTemplate = GridMetadata(
+                  id: 'custom_${DateTime.now().millisecondsSinceEpoch}',
+                  name: controller.text,
+                  horizontalSplits: [],
+                  verticalSplits: [],
+                );
+                setState(() {
+                  _templates.add(newTemplate);
+                  _selectedTemplate = newTemplate;
+                  _isEditing = true;
+                  _customMetadata = newTemplate.copyWith();
+                  _lastAppliedMetadata = newTemplate.copyWith();
+                });
+                Navigator.pop(context);
+              }
+            },
+            child: const Text('СОЗДАТЬ', style: TextStyle(color: Colors.orangeAccent, fontSize: 11, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSidebarEditor() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('НАЗВАНИЕ', style: TextStyle(color: Colors.white24, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1)),
+          const SizedBox(height: 8),
+          TextField(
+            onChanged: (val) => setState(() => _customMetadata = _customMetadata.copyWith(name: val)),
+            controller: TextEditingController(text: _customMetadata.name)
+              ..selection = TextSelection.collapsed(offset: _customMetadata.name.length),
+            style: const TextStyle(color: Colors.white, fontSize: 13),
+            decoration: const InputDecoration(
+              isDense: true,
+              contentPadding: EdgeInsets.symmetric(vertical: 8),
+              enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white10)),
+              focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.orangeAccent)),
+            ),
+          ),
+          const SizedBox(height: 24),
+          const Text('ЦВЕТ ЛИНИЙ', style: TextStyle(color: Colors.white24, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1)),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              _buildColorOption(const Color(0xFFFFAB40)), // orangeAccent
+              _buildColorOption(const Color(0xFF448AFF)), // blueAccent
+              _buildColorOption(const Color(0xFF69F0AE)), // greenAccent
+              _buildColorOption(const Color(0xFFFF5252)), // redAccent
+              _buildColorOption(const Color(0xFFE040FB)), // purpleAccent
+              _buildColorOption(const Color(0xFFBDBDBD)), // grey
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildColorOption(Color color) {
+    final isSelected = _customMetadata.colorValue == color.toARGB32();
+    return GestureDetector(
+      onTap: () => setState(() => _customMetadata = _customMetadata.copyWith(colorValue: color.toARGB32())),
+      child: Container(
+        width: 28,
+        height: 28,
+        decoration: BoxDecoration(
+          color: color,
+          shape: BoxShape.circle,
+          border: isSelected ? Border.all(color: Colors.white, width: 2) : Border.all(color: Colors.white.withValues(alpha: 0.1)),
+          boxShadow: isSelected ? [BoxShadow(color: color.withValues(alpha: 0.4), blurRadius: 10, spreadRadius: 1)] : null,
+        ),
+      ),
+    );
+  }
+
   Widget _buildActionButtons() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+      padding: const EdgeInsets.all(24.0),
       decoration: const BoxDecoration(
         color: Colors.black26,
         border: Border(top: BorderSide(color: Colors.white10)),
       ),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          if (!_isEditing)
             _buildButton(
-              label: _isEditing ? 'ЗАКОНЧИТЬ' : 'ИЗМЕНИТЬ СЕТКУ',
-              icon: _isEditing ? Icons.check_rounded : Icons.edit_note_rounded,
-              color: _isEditing ? Colors.greenAccent : Colors.white10,
+              label: 'РЕДАКТИРОВАТЬ',
+              icon: Icons.edit_rounded,
+              color: Colors.white10,
               onPressed: () {
                 setState(() {
-                  if (!_isEditing) {
-                    // При входе в режим редактирования копируем текущую сетку
-                    final currentMode = GridMode.fromModeString(_selectedTemplate?.id ?? 'system');
-                    final currentMeta = GridMetadata.fromMode(currentMode);
-                    _customMetadata = currentMeta.copyWith();
-                  }
-                  _isEditing = !_isEditing;
+                  _isEditing = true;
+                  _customMetadata = _selectedTemplate!.copyWith();
+                  _lastAppliedMetadata = _selectedTemplate!.copyWith();
+                });
+              },
+            )
+          else ...[
+            _buildButton(
+              label: 'СБРОСИТЬ',
+              icon: Icons.refresh_rounded,
+              color: Colors.redAccent.withValues(alpha: 0.1),
+              onPressed: () {
+                setState(() {
+                  _customMetadata = _lastAppliedMetadata!.copyWith();
                 });
               },
             ),
-            if (_isEditing) ...[
-              const SizedBox(width: 8),
-              _buildButton(
-                label: 'СБРОСИТЬ',
-                icon: Icons.refresh_rounded,
-                color: Colors.orangeAccent.withOpacity(0.1),
-                onPressed: () {
-                  setState(() {
-                    final currentMode = GridMode.fromModeString(_selectedTemplate?.id ?? 'system');
-                    final currentMeta = GridMetadata.fromMode(currentMode);
-                    _customMetadata = currentMeta.copyWith();
-                  });
-                },
-              ),
-            ],
-            const SizedBox(width: 32),
+            const SizedBox(width: 16),
             _buildButton(
-              label: 'ПРИМЕНИТЬ СЕТКУ',
+              label: 'ПРИМЕНИТЬ',
               icon: Icons.check_circle_outline_rounded,
               color: Colors.orangeAccent,
+              textColor: Colors.black,
               onPressed: () {
-                if (widget.onApply != null && _selectedTemplate != null) {
-                  final mode = _isEditing ? GridMode.custom : GridMode.fromModeString(_selectedTemplate!.id);
-                  widget.onApply!(mode, _isEditing ? _customMetadata : null);
-                  
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(_isEditing ? 'Кастомная сетка применена' : 'Сетка "${_selectedTemplate!.name}" применена'),
-                      duration: const Duration(seconds: 2),
-                      backgroundColor: Colors.orangeAccent,
-                    ),
-                  );
-                }
+                setState(() {
+                  // Обновляем текущий шаблон в списке
+                  final index = _templates.indexWhere((t) => t.id == _selectedTemplate?.id);
+                  if (index != -1) {
+                    _templates[index] = _customMetadata.copyWith();
+                    _selectedTemplate = _templates[index];
+                  }
+                  _lastAppliedMetadata = _customMetadata.copyWith();
+                  _isEditing = false;
+                });
+                widget.onApply?.call(GridMode.custom, _customMetadata);
               },
             ),
           ],
-        ),
+        ],
       ),
     );
   }
@@ -514,69 +750,36 @@ class _SettingsGridState extends State<SettingsGrid> {
     required String label,
     required IconData icon,
     required Color color,
+    Color textColor = Colors.white,
     required VoidCallback onPressed,
   }) {
-    final bool isAccent = color == Colors.orangeAccent;
-    return ElevatedButton.icon(
-      onPressed: onPressed,
-      icon: Icon(icon, size: 18),
-      label: Text(label),
-      style: ElevatedButton.styleFrom(
-        backgroundColor: color,
-        foregroundColor: isAccent ? Colors.black : Colors.white,
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        elevation: 0,
-        textStyle: const TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.bold,
-          letterSpacing: 1,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTemplateItem(GridTemplate template, bool isSelected) {
-    return InkWell(
-      onTap: () => setState(() => _selectedTemplate = template),
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: isSelected ? Colors.orangeAccent.withOpacity(0.1) : Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: isSelected ? Colors.orangeAccent.withOpacity(0.5) : Colors.transparent,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(12),
           ),
-        ),
-        child: Column(
-          children: [
-            Container(
-              height: 60,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.black38,
-                borderRadius: BorderRadius.circular(4),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 20, color: textColor),
+              const SizedBox(width: 12),
+              Text(
+                label,
+                style: TextStyle(
+                  color: textColor,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 1,
+                ),
               ),
-              child: Icon(
-                template.icon,
-                size: 24,
-                color: isSelected ? Colors.orangeAccent : Colors.white24,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              template.name,
-              style: TextStyle(
-                color: isSelected ? Colors.orangeAccent : Colors.white54,
-                fontSize: 10,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-              ),
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

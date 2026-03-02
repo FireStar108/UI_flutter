@@ -21,14 +21,14 @@ class GridPainter extends CustomPainter {
   GridPainter({required this.mode, this.customMetadata});
   @override
   void paint(Canvas canvas, Size size) {
+    final metadata = GridMetadata.fromMode(mode, customData: customMetadata);
+    
     final paint = Paint()
-      ..color = Colors.white24
+      ..color = metadata.color.withValues(alpha: 0.25)
       ..strokeWidth = 1.0
       ..style = PaintingStyle.stroke;
-
-    final metadata = GridMetadata.fromMode(mode, customData: customMetadata);
-    const int dashWidth = 8;
-    const int dashSpace = 8;
+    final int dashWidth = 8;
+    final int dashSpace = 8;
 
     // Отрисовка вертикальных линий
     for (final xRatio in metadata.horizontalSplits) {

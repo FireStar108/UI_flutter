@@ -5,6 +5,7 @@ import 'ui/window_item.dart';
 import 'core/grid_models.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:math' as math;
+import 'dart:convert';
 
 
 class App extends StatefulWidget {
@@ -34,15 +35,16 @@ class _AppState extends State<App> {
     final prefs = await SharedPreferences.getInstance();
     final modeIndex = prefs.getInt('grid_mode') ?? 0;
     
-    // Загрузка кастомных метаданных, если они есть
-    final hSplits = prefs.getStringList('custom_h_splits');
-    final vSplits = prefs.getStringList('custom_v_splits');
+    // Загрузка кастомных метаданных из JSON
+    final customMetaJson = prefs.getString('custom_grid_metadata');
     GridMetadata? customMeta;
-    if (hSplits != null && vSplits != null) {
-      customMeta = GridMetadata(
-        horizontalSplits: hSplits.map(double.parse).toList(),
-        verticalSplits: vSplits.map(double.parse).toList(),
-      );
+    if (customMetaJson != null) {
+      try {
+        final map = jsonDecode(customMetaJson);
+        customMeta = GridMetadata.fromJson(map);
+      } catch (e) {
+        debugPrint('Error loading grid metadata: $e');
+      }
     }
 
     if (mounted) {
@@ -57,8 +59,7 @@ class _AppState extends State<App> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt('grid_mode', mode.index);
     if (metadata != null) {
-      await prefs.setStringList('custom_h_splits', metadata.horizontalSplits.map((e) => e.toString()).toList());
-      await prefs.setStringList('custom_v_splits', metadata.verticalSplits.map((e) => e.toString()).toList());
+      await prefs.setString('custom_grid_metadata', jsonEncode(metadata.toJson()));
     }
   }
 
@@ -242,7 +243,7 @@ class _AppState extends State<App> {
                       icon: Icon(_isSettingsPanelVisible ? Icons.close : Icons.settings),
                       label: const Text('Настройки'),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: _isSettingsPanelVisible ? Colors.redAccent.withOpacity(0.2) : Colors.white10,
+                        backgroundColor: _isSettingsPanelVisible ? Colors.redAccent.withValues(alpha: 0.2) : Colors.white10,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                       ),
@@ -253,7 +254,7 @@ class _AppState extends State<App> {
                       icon: Icon(_isAddPanelVisible ? Icons.close : Icons.add),
                       label: const Text('Добавить окно'),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: _isAddPanelVisible ? Colors.redAccent.withOpacity(0.2) : Colors.white10,
+                        backgroundColor: _isAddPanelVisible ? Colors.redAccent.withValues(alpha: 0.2) : Colors.white10,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                       ),
@@ -283,8 +284,8 @@ class _AppState extends State<App> {
                                     width: _previewSize!.width * workAreaSize.width,
                                     height: _previewSize!.height * workAreaSize.height,
                                     decoration: BoxDecoration(
-                                      color: Colors.black.withOpacity(0.3),
-                                      border: Border.all(color: Colors.blueAccent.withOpacity(0.5), width: 2),
+                                      color: Colors.black.withValues(alpha: 0.3),
+                                      border: Border.all(color: Colors.blueAccent.withValues(alpha: 0.5), width: 2),
                                     ),
                                   ),
                                 ),
