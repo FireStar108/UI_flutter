@@ -75,12 +75,12 @@ class _AppState extends State<App> {
       type: type,
       relativePosition: const Offset(0.1, 0.1),
       relativeSize: type == 'viewport_cam' 
-          ? const Size(0.35, 0.197) 
+          ? const Size(0.45, 0.35) // Начальный размер для камеры (ширина, высота - в долях от экрана 0..1)
           : type == 'settings_grid'
-              ? const Size(0.5, 0.45)
+              ? const Size(0.6, 0.6) // Начальный размер для настроек сетки
               : type == 'file_browser'
-                  ? const Size(0.4, 0.5)
-                  : const Size(0.3, 0.3),
+                  ? const Size(0.5, 0.55) // Начальный размер для файлового браузера
+                  : const Size(0.4, 0.4),
       color: type == 'settings_grid' 
           ? Colors.orangeAccent 
           : type == 'file_browser'
@@ -326,8 +326,8 @@ class _AppState extends State<App> {
       final relativeDeltaY = delta.dy / areaSize.height;
 
       data.relativeSize = Size(
-        math.max(0.15, data.relativeSize.width + relativeDeltaX),
-        math.max(0.15, data.relativeSize.height + relativeDeltaY),
+        math.max(0.25, data.relativeSize.width + relativeDeltaX), // 0.25 - это минимальная ширина окна (25% от экрана)
+        math.max(0.25, data.relativeSize.height + relativeDeltaY), // 0.25 - это минимальная высота окна
       );
     });
   }
