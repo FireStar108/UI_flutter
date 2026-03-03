@@ -22,6 +22,8 @@ class _SettingsGridState extends State<SettingsGrid> {
 
   // Остояние редактора линий
   String? _activeLineId;
+  bool _isSelectingCells = false;
+  bool _selectingFirstCell = false;
 
   @override
   void initState() {
@@ -194,12 +196,69 @@ class _SettingsGridState extends State<SettingsGrid> {
 
         return GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onTapUp: (details) {
-            setState(() => _activeLineId = null);
-          },
-          onSecondaryTapUp: (details) {
+          onDoubleTapDown: (details) {
             if (!_isEditing) return;
             _showContextMenu(context, details.localPosition, size);
+          },
+          onTapUp: (details) {
+            if (!_isEditing) return;
+            
+            if (_isSelectingCells && _activeLineId != null) {
+              final lineIndex = _customMetadata.lines.indexWhere((l) => l.id == _activeLineId);
+              if (lineIndex == -1) return;
+              final line = _customMetadata.lines[lineIndex];
+              
+              final relPos = Offset(details.localPosition.dx / size.width, details.localPosition.dy / size.height);
+              
+              // Находим ячейку
+              final tempMeta = GridMetadata(id: 'temp', name: 'temp', lines: _customMetadata.lines.where((l) => l.id != line.id).toList());
+              final cells = tempMeta.computeCells();
+              
+              Rect? clickedRect;
+              for (var cell in cells) {
+                if (cell.rect.contains(relPos)) {
+                  clickedRect = cell.rect; break;
+                }
+              }
+              
+              if (clickedRect != null) {
+                double newStart = line.crossStart;
+                double newEnd = line.crossEnd;
+                
+                if (line.isVertical) {
+                   if (_selectingFirstCell) {
+                      newStart = clickedRect.top;
+                      newEnd = clickedRect.bottom;
+                      _selectingFirstCell = false;
+                   } else {
+                      if (clickedRect.top < newStart) newStart = clickedRect.top;
+                      if (clickedRect.bottom > newEnd) newEnd = clickedRect.bottom;
+                   }
+                } else {
+                   if (_selectingFirstCell) {
+                      newStart = clickedRect.left;
+                      newEnd = clickedRect.right;
+                      _selectingFirstCell = false;
+                   } else {
+                      if (clickedRect.left < newStart) newStart = clickedRect.left;
+                      if (clickedRect.right > newEnd) newEnd = clickedRect.right;
+                   }
+                }
+                
+                setState(() {
+                   _customMetadata.lines[lineIndex] = GridLine(
+                      id: line.id,
+                      isVertical: line.isVertical,
+                      position: line.position,
+                      crossStart: newStart,
+                      crossEnd: newEnd,
+                   );
+                });
+              }
+              return;
+            }
+            
+            setState(() => _activeLineId = null);
           },
           child: Stack(
             children: [
@@ -318,8 +377,9 @@ class _SettingsGridState extends State<SettingsGrid> {
         id: 'line_${DateTime.now().millisecondsSinceEpoch}',
         isVertical: isVertical,
         position: position,
-        isGlobal: true, // По умолчанию пока глобальная (или In-Box, если хотим)
-        anchor: anchor,
+        crossStart: 0.0,
+        crossEnd: 1.0,
+        
       );
       _customMetadata.lines.add(newLine);
       _activeLineId = newLine.id;
@@ -362,8 +422,8 @@ class _SettingsGridState extends State<SettingsGrid> {
                     id: line.id,
                     isVertical: line.isVertical,
                     position: newPos,
-                    isGlobal: line.isGlobal,
-                    anchor: line.anchor,
+                    crossStart: line.crossStart,
+                    crossEnd: line.crossEnd,
                   );
                 });
               },
@@ -398,8 +458,8 @@ class _SettingsGridState extends State<SettingsGrid> {
                     id: line.id,
                     isVertical: line.isVertical,
                     position: newPos,
-                    isGlobal: line.isGlobal,
-                    anchor: line.anchor,
+                    crossStart: line.crossStart,
+                    crossEnd: line.crossEnd,
                   );
                 });
               },

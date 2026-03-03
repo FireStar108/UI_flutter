@@ -356,13 +356,16 @@ class _AppState extends State<App> {
     }
 
     if (targetCell != null) {
+      final double relativeGapX = gap / areaSize.width;
+      final double relativeGapY = gap / areaSize.height;
+
       _previewPosition = Offset(
-        targetCell.rect.left * areaSize.width + gap,
-        targetCell.rect.top * areaSize.height + gap,
+        targetCell.rect.left + relativeGapX,
+        targetCell.rect.top + relativeGapY,
       );
       _previewSize = Size(
-        targetCell.rect.width * areaSize.width - gap * 2,
-        targetCell.rect.height * areaSize.height - gap * 2,
+        targetCell.rect.width - 2 * relativeGapX,
+        targetCell.rect.height - 2 * relativeGapY,
       );
     } else {
       _previewPosition = null;

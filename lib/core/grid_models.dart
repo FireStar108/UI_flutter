@@ -26,33 +26,47 @@ class GridLine {
   final String id;
   final bool isVertical; // true = вертикальная линия (режет по X)
   final double position; // 0..1
-  final bool isGlobal;
-  final Offset anchor; // Точка клика при создании (для In-Box линий)
+  
+  // Новые поля для In-Box сплитов
+  final double crossStart; // 0..1 (для верт. линии это Y-начало, для гориз. - X-начало)
+  final double crossEnd;   // 0..1 (для верт. линии это Y-конец, для гориз. - X-конец)
 
   GridLine({
     required this.id,
     required this.isVertical,
     required this.position,
-    this.isGlobal = true,
-    this.anchor = const Offset(0.5, 0.5),
+    this.crossStart = 0.0,
+    this.crossEnd = 1.0,
   });
+
+  bool get isGlobal => crossStart <= 0.0 && crossEnd >= 1.0;
 
   Map<String, dynamic> toJson() => {
     'id': id,
     'isVertical': isVertical,
     'position': position,
-    'isGlobal': isGlobal,
-    'anchorX': anchor.dx,
-    'anchorY': anchor.dy,
+    'crossStart': crossStart,
+    'crossEnd': crossEnd,
   };
 
-  factory GridLine.fromJson(Map<String, dynamic> json) => GridLine(
-    id: json['id'],
-    isVertical: json['isVertical'],
-    position: json['position'],
-    isGlobal: json['isGlobal'] ?? true,
-    anchor: Offset(json['anchorX'] ?? 0.5, json['anchorY'] ?? 0.5),
-  );
+  factory GridLine.fromJson(Map<String, dynamic> json) {
+    double start = 0.0;
+    double end = 1.0;
+    if (json.containsKey('crossStart')) {
+      start = (json['crossStart'] as num).toDouble();
+      end = (json['crossEnd'] as num).toDouble();
+    } else if (json['isGlobal'] == false) {
+       // Legacy
+    }
+
+    return GridLine(
+      id: json['id'],
+      isVertical: json['isVertical'] as bool,
+      position: (json['position'] as num).toDouble(),
+      crossStart: start,
+      crossEnd: end,
+    );
+  }
 }
 
 class GridCell {
@@ -106,40 +120,31 @@ class GridMetadata {
   List<GridCell> computeCells() {
     List<GridCell> cells = [GridCell(const Rect.fromLTWH(0, 0, 1, 1))]; // Начальный холст
 
-    // Глобальные линии режут всё
-    final globalLines = lines.where((l) => l.isGlobal).toList();
-    for (var line in globalLines) {
+    for (var line in lines) {
       cells = _splitCells(cells, line);
-    }
-
-    // Локальные линии (in-box) режут только ячейку, в которой находится anchor
-    final localLines = lines.where((l) => !l.isGlobal).toList();
-    for (var line in localLines) {
-      cells = _splitCells(cells, line, targetAnchor: line.anchor);
     }
 
     return cells;
   }
 
-  List<GridCell> _splitCells(List<GridCell> currentCells, GridLine line, {Offset? targetAnchor}) {
+  List<GridCell> _splitCells(List<GridCell> currentCells, GridLine line) {
     List<GridCell> nextCells = [];
     for (var cell in currentCells) {
-      // Если это In-Box линия, проверяем, попадает ли anchor в эту ячейку
-      if (targetAnchor != null && !cell.rect.contains(targetAnchor)) {
-        nextCells.add(cell); // Не режем
-        continue;
-      }
-
-      // Проверяем, пересекает ли линия вообще эту ячейку
       if (line.isVertical) {
-        if (line.position > cell.rect.left && line.position < cell.rect.right) {
+        bool intersectsX = line.position > cell.rect.left + 0.001 && line.position < cell.rect.right - 0.001;
+        bool intersectsY = (line.crossEnd > cell.rect.top + 0.001) && (line.crossStart < cell.rect.bottom - 0.001);
+        
+        if (intersectsX && intersectsY) {
           nextCells.add(GridCell(Rect.fromLTRB(cell.rect.left, cell.rect.top, line.position, cell.rect.bottom)));
           nextCells.add(GridCell(Rect.fromLTRB(line.position, cell.rect.top, cell.rect.right, cell.rect.bottom)));
         } else {
           nextCells.add(cell);
         }
       } else {
-        if (line.position > cell.rect.top && line.position < cell.rect.bottom) {
+        bool intersectsY = line.position > cell.rect.top + 0.001 && line.position < cell.rect.bottom - 0.001;
+        bool intersectsX = (line.crossEnd > cell.rect.left + 0.001) && (line.crossStart < cell.rect.right - 0.001);
+        
+        if (intersectsY && intersectsX) {
           nextCells.add(GridCell(Rect.fromLTRB(cell.rect.left, cell.rect.top, cell.rect.right, line.position)));
           nextCells.add(GridCell(Rect.fromLTRB(cell.rect.left, line.position, cell.rect.right, cell.rect.bottom)));
         } else {
@@ -152,42 +157,11 @@ class GridMetadata {
 
   List<VisualLine> computeVisualLines() {
     List<VisualLine> vLines = [];
-    // Чтобы нарисовать линию, применим computeCells, но ИСКЛЮЧАЯ саму эту линию из расчета,
-    // чтобы найти ту ячейку, которую она СОБИРАЕТСЯ разрезать.
-    
-    for (int i = 0; i < lines.length; i++) {
-      final line = lines[i];
-      if (line.isGlobal) {
-        // Глобальные линии всегда от края до края
-        if (line.isVertical) {
-          vLines.add(VisualLine(line, Offset(line.position, 0), Offset(line.position, 1)));
-        } else {
-          vLines.add(VisualLine(line, Offset(0, line.position), Offset(1, line.position)));
-        }
+    for (var line in lines) {
+      if (line.isVertical) {
+         vLines.add(VisualLine(line, Offset(line.position, line.crossStart), Offset(line.position, line.crossEnd)));
       } else {
-        // Вычисляем сетку только из линий ДО текущей (или всех остальных — порядок создания имеет значение!)
-        // Логичнее считать сетку из ВСЕХ глобальных + локальных ДО неё.
-        final previousLines = lines.sublist(0, i);
-        // Создаем временную метадату для расчета
-        final tempMeta = GridMetadata(id: 'temp', name: 'temp', lines: previousLines);
-        final cells = tempMeta.computeCells();
-        
-        // Ищем ячейку, в которую попал anchor
-        GridCell? targetCell;
-        for (var c in cells) {
-          if (c.rect.contains(line.anchor)) {
-            targetCell = c;
-            break;
-          }
-        }
-        
-        if (targetCell != null) {
-          if (line.isVertical) {
-             vLines.add(VisualLine(line, Offset(line.position, targetCell.rect.top), Offset(line.position, targetCell.rect.bottom)));
-          } else {
-             vLines.add(VisualLine(line, Offset(targetCell.rect.left, line.position), Offset(targetCell.rect.right, line.position)));
-          }
-        }
+         vLines.add(VisualLine(line, Offset(line.crossStart, line.position), Offset(line.crossEnd, line.position)));
       }
     }
     return vLines;
