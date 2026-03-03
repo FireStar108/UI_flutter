@@ -5,21 +5,27 @@ import 'file_browser.dart';
 import '../core/grid_models.dart';
 
 class WindowData {
+  final GlobalKey key;
   final String id;
   final String type; // Тип окна
   Offset relativePosition; // 0..1
   Size relativeSize; // 0..1
   final Color color;
   bool isMinimized;
+  bool isClosing; // Флаг для анимации закрытия из панели задач
+  bool isFlying; // Флаг для скрытия окна во время перелета
 
   WindowData({
+    GlobalKey? key,
     required this.id,
     this.type = 'Окно',
     this.relativePosition = Offset.zero,
     this.relativeSize = const Size(0.3, 0.3), // 20% от экрана
     this.color = const Color(0xFF212121), // Темно-серый по умолчанию
     this.isMinimized = false,
-  });
+    this.isClosing = false,
+    this.isFlying = false,
+  }) : key = key ?? GlobalKey();
 }
 
 class WindowItem extends StatelessWidget {
@@ -31,6 +37,7 @@ class WindowItem extends StatelessWidget {
   final Function() onPanEnd;
   final Function() onMinimize;
   final Function() onDelete;
+  final Function() onFocus;
   final Function(GridMode mode, GridMetadata? metadata)? onGridModeChanged;
   final Color themeColor;
 
@@ -44,6 +51,7 @@ class WindowItem extends StatelessWidget {
     required this.onPanEnd,
     required this.onMinimize,
     required this.onDelete,
+    required this.onFocus,
     this.onGridModeChanged,
     required this.themeColor,
   });
@@ -58,8 +66,11 @@ class WindowItem extends StatelessWidget {
     return Positioned(
       left: left,
       top: top,
-      child: Stack(
-        children: [
+      child: GestureDetector(
+        onTapDown: (_) => onFocus(),
+        behavior: HitTestBehavior.deferToChild,
+        child: Stack(
+          children: [
           Container(
             width: width,
             height: height,
@@ -166,6 +177,6 @@ class WindowItem extends StatelessWidget {
           ),
         ],
       ),
-    );
+    ));
   }
 }

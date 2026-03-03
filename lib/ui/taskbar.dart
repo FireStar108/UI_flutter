@@ -44,60 +44,66 @@ class Taskbar extends StatelessWidget {
       index: index,
       child: Padding(
         padding: const EdgeInsets.only(right: 8.0, top: 4, bottom: 4),
-        child: InkWell(
-          onTap: () => onRestore(w),
-          borderRadius: BorderRadius.circular(6),
-          child: Container(
-            width: 140,
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            decoration: BoxDecoration(
-              color: Colors.grey[900],
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: w.color.withValues(alpha: 0.5)),
-              boxShadow: [
-                BoxShadow(
-                  color: w.color.withValues(alpha: 0.2),
-                  blurRadius: 8,
-                  spreadRadius: 1,
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  w.type == 'viewport_cam'
-                      ? Icons.videocam_outlined
-                      : w.type == 'settings_grid'
-                          ? Icons.grid_4x4_rounded
-                          : w.type == 'file_browser'
-                              ? Icons.folder_open_rounded
-                              : Icons.window,
-                  size: 16,
-                  color: w.color,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    w.type.toUpperCase(),
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white70,
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
+        child: AnimatedSize(
+          duration: const Duration(milliseconds: 600),
+          curve: Curves.easeOutCubic,
+          child: w.isClosing
+              ? const SizedBox(width: 0, height: 40) // Сворачивается в 0
+              : InkWell(
+                  onTap: () => onRestore(w),
+                  borderRadius: BorderRadius.circular(6),
+                  child: Container(
+                    width: 140,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[900],
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: w.color.withValues(alpha: 0.5)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: w.color.withValues(alpha: 0.2),
+                          blurRadius: 8,
+                          spreadRadius: 1,
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          w.type == 'viewport_cam'
+                              ? Icons.videocam_outlined
+                              : w.type == 'settings_grid'
+                                  ? Icons.grid_4x4_rounded
+                                  : w.type == 'file_browser'
+                                      ? Icons.folder_open_rounded
+                                      : Icons.window,
+                          size: 16,
+                          color: w.color,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            w.type.toUpperCase(),
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        InkWell(
+                          onTap: () => onClose(w.id),
+                          borderRadius: BorderRadius.circular(12),
+                          child: const Padding(
+                            padding: EdgeInsets.all(2.0),
+                            child: Icon(Icons.close, size: 14, color: Colors.white54),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
-                InkWell(
-                  onTap: () => onClose(w.id),
-                  borderRadius: BorderRadius.circular(12),
-                  child: const Padding(
-                    padding: EdgeInsets.all(2.0),
-                    child: Icon(Icons.close, size: 14, color: Colors.white54),
-                  ),
-                ),
-              ],
-            ),
-          ),
         ),
       ),
     );

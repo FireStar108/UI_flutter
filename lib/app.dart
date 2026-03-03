@@ -114,6 +114,9 @@ class _AppState extends State<App> {
       );
 
       final key = GlobalKey();
+      newWindow.isFlying = true;
+      _windows.add(newWindow); // Сразу добавляем, но оно будет Offstage
+
       _flyingAnimations.add(
         FlyingWindow(
           key: key,
@@ -124,7 +127,7 @@ class _AppState extends State<App> {
           onComplete: () {
             setState(() {
               _flyingAnimations.removeWhere((anim) => anim.key == key);
-              _windows.add(newWindow);
+              newWindow.isFlying = false;
             });
           },
         ),
@@ -181,7 +184,7 @@ class _AppState extends State<App> {
         try {
           final w = _minimizedWindows.firstWhere((w) => w.id == id);
           final index = _minimizedWindows.indexOf(w);
-          _minimizedWindows.remove(w);
+          w.isClosing = true; // Помечаем, чтобы скрыть из таскбара плавно
 
           final startRect = Rect.fromLTWH(180.0 + index * 150.0, 6.0, 140, 48);
 
@@ -194,6 +197,7 @@ class _AppState extends State<App> {
               onComplete: () {
                 setState(() {
                   _flyingAnimations.removeWhere((anim) => anim.key == key);
+                  _minimizedWindows.remove(w); // Окончательно удаляем после взрыва
                 });
               },
             ) as Widget,
@@ -203,10 +207,19 @@ class _AppState extends State<App> {
     });
   }
 
+  void _focusWindow(WindowData w) {
+    if (_windows.last.id != w.id) {
+      setState(() {
+        _windows.remove(w);
+        _windows.add(w);
+      });
+    }
+  }
+
   void _minimizeWindow(WindowData w, Size areaSize) {
     setState(() {
-      _windows.remove(w);
-      w.isMinimized = true;
+      _focusWindow(w);
+      w.isFlying = true;
 
       // Начальные координаты относительно экрана (добавляем 60px высоту панели)
       final startRect = Rect.fromLTWH(
@@ -229,6 +242,9 @@ class _AppState extends State<App> {
           onComplete: () {
             setState(() {
               _flyingAnimations.removeWhere((anim) => anim.key == key);
+              w.isFlying = false;
+              w.isMinimized = true;
+              _windows.remove(w);
               _minimizedWindows.add(w);
             });
           },
@@ -241,7 +257,9 @@ class _AppState extends State<App> {
     setState(() {
       final index = _minimizedWindows.indexOf(w);
       _minimizedWindows.remove(w);
+      _windows.add(w);
       w.isMinimized = false;
+      w.isFlying = true;
 
       final startRect = Rect.fromLTWH(180.0 + index * 150.0, 6.0, 140, 48);
       // Конечные координаты (добавляем 60px высоту панели)
@@ -263,7 +281,7 @@ class _AppState extends State<App> {
           onComplete: () {
             setState(() {
               _flyingAnimations.removeWhere((anim) => anim.key == key);
-              _windows.add(w);
+              w.isFlying = false;
             });
           },
         ),
@@ -283,6 +301,7 @@ class _AppState extends State<App> {
 
 
   void _handlePanUpdate(WindowData data, DragUpdateDetails details, Size areaSize) {
+    _focusWindow(data);
     setState(() {
       // Конвертируем дельту из пикселей в относительные координаты
       final relativeDelta = Offset(
@@ -301,13 +320,14 @@ class _AppState extends State<App> {
   }
 
   void _handleResizeUpdate(WindowData data, Offset delta, Size areaSize) {
+    _focusWindow(data);
     setState(() {
       final relativeDeltaX = delta.dx / areaSize.width;
       final relativeDeltaY = delta.dy / areaSize.height;
 
       data.relativeSize = Size(
-        math.max(0.05, data.relativeSize.width + relativeDeltaX),
-        math.max(0.05, data.relativeSize.height + relativeDeltaY),
+        math.max(0.15, data.relativeSize.width + relativeDeltaX),
+        math.max(0.15, data.relativeSize.height + relativeDeltaY),
       );
     });
   }
@@ -489,26 +509,30 @@ class _AppState extends State<App> {
                             ],
                           ),
                         ),
-                        // Окна
-                        ..._windows.map((w) {
-                          return WindowItem(
-                            key: ValueKey(w.id),
-                            data: w,
-                            isShiftPressed: _isShiftPressed,
-                            screenSize: workAreaSize,
-                            themeColor: GridMetadata.fromMode(_currentGridMode, customData: _customGridMetadata).color,
-                             onGridModeChanged: (mode, metadata) {
-                                setState(() {
-                                  _currentGridMode = mode;
-                                  if (metadata != null) _customGridMetadata = metadata;
-                                });
-                                _saveGridMode(mode, metadata);
-                              },
-                            onPanUpdate: (details) => _handlePanUpdate(w, details, workAreaSize),
-                            onResizeUpdate: (delta) => _handleResizeUpdate(w, delta, workAreaSize),
-                            onPanEnd: () => _handlePanEnd(w),
-                            onMinimize: () => _minimizeWindow(w, workAreaSize),
-                            onDelete: () => _removeWindow(w.id),
+                        // Окна (все)
+                        ...[..._windows, ..._minimizedWindows].map((w) {
+                          return Offstage(
+                            offstage: w.isMinimized || w.isFlying,
+                            child: WindowItem(
+                              key: w.key,
+                              data: w,
+                              isShiftPressed: _isShiftPressed,
+                              screenSize: workAreaSize,
+                              themeColor: GridMetadata.fromMode(_currentGridMode, customData: _customGridMetadata).color,
+                               onGridModeChanged: (mode, metadata) {
+                                  setState(() {
+                                    _currentGridMode = mode;
+                                    if (metadata != null) _customGridMetadata = metadata;
+                                  });
+                                  _saveGridMode(mode, metadata);
+                                },
+                              onPanUpdate: (details) => _handlePanUpdate(w, details, workAreaSize),
+                              onResizeUpdate: (delta) => _handleResizeUpdate(w, delta, workAreaSize),
+                              onPanEnd: () => _handlePanEnd(w),
+                              onMinimize: () => _minimizeWindow(w, workAreaSize),
+                              onDelete: () => _removeWindow(w.id),
+                              onFocus: () => _focusWindow(w),
+                            ),
                           );
                         }),
                         // Анимированная панель выбора окон
