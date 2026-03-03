@@ -337,54 +337,37 @@ class _AppState extends State<App> {
     final localCursor = renderBox.globalToLocal(cursorPosition);
 
     final metadata = GridMetadata.fromMode(_currentGridMode, customData: _customGridMetadata);
-    
-    // Списки всех границ (включая 0 и 1)
-    final xBoundaries = [0.0, ...metadata.horizontalSplits, 1.0];
-    final yBoundaries = [0.0, ...metadata.verticalSplits, 1.0];
-    
-    // Сортируем на всякий случай
-    xBoundaries.sort();
-    yBoundaries.sort();
+    final cells = metadata.computeCells();
 
-    final normalizedCursorX = localCursor.dx / areaSize.width;
-    final normalizedCursorY = localCursor.dy / areaSize.height;
+    final normalizedCursor = Offset(
+      localCursor.dx / areaSize.width,
+      localCursor.dy / areaSize.height,
+    );
 
     // Константа отступа
     const double gap = 3.0;
-    final double padX = gap / areaSize.width;
-    final double padY = gap / areaSize.height;
-
-    // Поиск текущей ячейки по X
-    double left = 0, right = 1;
-    for (int i = 0; i < xBoundaries.length - 1; i++) {
-      if (normalizedCursorX >= xBoundaries[i] && normalizedCursorX < xBoundaries[i + 1]) {
-        left = xBoundaries[i];
-        right = xBoundaries[i + 1];
+    
+    GridCell? targetCell;
+    for (var cell in cells) {
+      if (cell.rect.contains(normalizedCursor)) {
+        targetCell = cell;
         break;
       }
     }
-    // Если на самом краю 1.0
-    if (normalizedCursorX >= 1.0) {
-      left = xBoundaries[xBoundaries.length - 2];
-      right = 1.0;
-    }
 
-    // Поиск текущей ячейки по Y
-    double top = 0, bottom = 1;
-    for (int i = 0; i < yBoundaries.length - 1; i++) {
-      if (normalizedCursorY >= yBoundaries[i] && normalizedCursorY < yBoundaries[i + 1]) {
-        top = yBoundaries[i];
-        bottom = yBoundaries[i + 1];
-        break;
-      }
+    if (targetCell != null) {
+      _previewPosition = Offset(
+        targetCell.rect.left * areaSize.width + gap,
+        targetCell.rect.top * areaSize.height + gap,
+      );
+      _previewSize = Size(
+        targetCell.rect.width * areaSize.width - gap * 2,
+        targetCell.rect.height * areaSize.height - gap * 2,
+      );
+    } else {
+      _previewPosition = null;
+      _previewSize = null;
     }
-    if (normalizedCursorY >= 1.0) {
-      top = yBoundaries[yBoundaries.length - 2];
-      bottom = 1.0;
-    }
-
-    _previewPosition = Offset(left + padX, top + padY);
-    _previewSize = Size(right - left - 2 * padX, bottom - top - 2 * padY);
   }
 
   void _handlePanEnd(WindowData data) {

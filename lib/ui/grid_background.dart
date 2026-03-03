@@ -30,19 +30,15 @@ class GridPainter extends CustomPainter {
     final int dashWidth = 8;
     final int dashSpace = 8;
 
-    // Отрисовка вертикальных линий
-    for (final xRatio in metadata.horizontalSplits) {
-      final x = size.width * xRatio;
-      _drawDashedLine(canvas, Offset(x, 0), Offset(x, size.height), paint, dashWidth, dashSpace);
+    // Отрисовка всех линий (глобальных и in-box)
+    final vLines = metadata.computeVisualLines();
+    for (var vLine in vLines) {
+      final start = Offset(vLine.start.dx * size.width, vLine.start.dy * size.height);
+      final end = Offset(vLine.end.dx * size.width, vLine.end.dy * size.height);
+      _drawDashedLine(canvas, start, end, paint, dashWidth, dashSpace);
     }
 
-    // Отрисовка горизонтальных линий
-    for (final yRatio in metadata.verticalSplits) {
-      final y = size.height * yRatio;
-      _drawDashedLine(canvas, Offset(0, y), Offset(size.width, y), paint, dashWidth, dashSpace);
-    }
-
-    // Отрисовка крестиков на пересечениях (только для системной или ключевых точек)
+    // Отрисовка крестиков на пересечениях (только для системной сетки по умолчанию)
     if (mode == GridMode.system) {
       _drawCross(canvas, Offset(size.width * (10 / 16), size.height * (6 / 9)));
     }
