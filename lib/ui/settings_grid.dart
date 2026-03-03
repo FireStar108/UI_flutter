@@ -59,7 +59,9 @@ class _SettingsGridState extends State<SettingsGrid> {
                 children: [
                   Expanded(
                     child: Padding(
-                      padding: const EdgeInsets.all(32.0),
+                      // 🪟 НАСТРОЙКА БОРТИКОВ (ОТСТУПОВ) ПРЕВЬЮ
+                      // Измените значение 16.0 на нужное (например, 8.0 для ещё меньших бортиков)
+                      padding: const EdgeInsets.all(16.0),
                       child: LayoutBuilder(
                         builder: (context, constraints) {
                           // Адаптивное превью 16:9
@@ -715,7 +717,9 @@ class _SettingsGridState extends State<SettingsGrid> {
 
   Widget _buildActionButtons() {
     return Container(
-      padding: const EdgeInsets.all(24.0),
+      // 🎛 НАСТРОЙКА ОТСТУПОВ ВОКРУГ НИЖНИХ КНОПОК ("ПРИМЕНИТЬ", "РЕДАКТИРОВАТЬ")
+      // Уменьшите с 16.0 до 8.0, если кнопки не влезают по высоте
+      padding: const EdgeInsets.all(16.0),
       decoration: const BoxDecoration(
         color: Colors.black26,
         border: Border(top: BorderSide(color: Colors.white10)),
@@ -794,14 +798,14 @@ class _SettingsGridState extends State<SettingsGrid> {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 20, color: textColor),
-              const SizedBox(width: 12),
+              Icon(icon, size: 16, color: textColor), // Уменьшили размер иконки (было 20)
+              const SizedBox(width: 8),
               Text(
                 label,
                 style: TextStyle(
                   color: textColor,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w900,
+                  fontSize: 10, // Уменьшили шрифт (было 11)
+                  fontWeight: FontWeight.bold,
                   letterSpacing: 1,
                 ),
               ),

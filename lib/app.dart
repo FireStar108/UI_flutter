@@ -75,11 +75,11 @@ class _AppState extends State<App> {
       type: type,
       relativePosition: const Offset(0.1, 0.1),
       relativeSize: type == 'viewport_cam' 
-          ? const Size(0.45, 0.35) // Начальный размер для камеры (ширина, высота - в долях от экрана 0..1)
+          ? const Size(0.4, 0.5) // Начальный размер для камеры (ширина, высота - в долях от экрана 0..1)
           : type == 'settings_grid'
-              ? const Size(0.6, 0.6) // Начальный размер для настроек сетки
+              ? const Size(0.4, 0.5) // Начальный размер для настроек сетки
               : type == 'file_browser'
-                  ? const Size(0.5, 0.55) // Начальный размер для файлового браузера
+                  ? const Size(0.4, 0.5) // Начальный размер для файлового браузера
                   : const Size(0.4, 0.4),
       color: type == 'settings_grid' 
           ? Colors.orangeAccent 
