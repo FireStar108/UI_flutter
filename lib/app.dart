@@ -208,7 +208,7 @@ class _AppState extends State<App> {
   }
 
   void _focusWindow(WindowData w) {
-    if (_windows.last.id != w.id) {
+    if (_windows.isNotEmpty && _windows.last.id != w.id && _windows.contains(w)) {
       setState(() {
         _windows.remove(w);
         _windows.add(w);
@@ -511,15 +511,14 @@ class _AppState extends State<App> {
                         ),
                         // Окна (все)
                         ...[..._windows, ..._minimizedWindows].map((w) {
-                          return Offstage(
-                            offstage: w.isMinimized || w.isFlying,
-                            child: WindowItem(
-                              key: w.key,
-                              data: w,
-                              isShiftPressed: _isShiftPressed,
-                              screenSize: workAreaSize,
-                              themeColor: GridMetadata.fromMode(_currentGridMode, customData: _customGridMetadata).color,
-                               onGridModeChanged: (mode, metadata) {
+                          return WindowItem(
+                            key: w.key,
+                            data: w,
+                            isHidden: w.isMinimized || w.isFlying,
+                            isShiftPressed: _isShiftPressed,
+                            screenSize: workAreaSize,
+                            themeColor: GridMetadata.fromMode(_currentGridMode, customData: _customGridMetadata).color,
+                             onGridModeChanged: (mode, metadata) {
                                   setState(() {
                                     _currentGridMode = mode;
                                     if (metadata != null) _customGridMetadata = metadata;
@@ -532,8 +531,7 @@ class _AppState extends State<App> {
                               onMinimize: () => _minimizeWindow(w, workAreaSize),
                               onDelete: () => _removeWindow(w.id),
                               onFocus: () => _focusWindow(w),
-                            ),
-                          );
+                            );
                         }),
                         // Анимированная панель выбора окон
                         AnimatedPositioned(

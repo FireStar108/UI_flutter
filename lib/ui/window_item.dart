@@ -30,6 +30,7 @@ class WindowData {
 
 class WindowItem extends StatelessWidget {
   final WindowData data;
+  final bool isHidden;
   final bool isShiftPressed;
   final Size screenSize;
   final Function(DragUpdateDetails details) onPanUpdate;
@@ -44,6 +45,7 @@ class WindowItem extends StatelessWidget {
   const WindowItem({
     super.key,
     required this.data,
+    this.isHidden = false,
     required this.isShiftPressed,
     required this.screenSize,
     required this.onPanUpdate,
@@ -66,11 +68,13 @@ class WindowItem extends StatelessWidget {
     return Positioned(
       left: left,
       top: top,
-      child: GestureDetector(
-        onTapDown: (_) => onFocus(),
-        behavior: HitTestBehavior.deferToChild,
-        child: Stack(
-          children: [
+      child: Offstage(
+        offstage: isHidden,
+        child: GestureDetector(
+          onTapDown: (_) => onFocus(),
+          behavior: HitTestBehavior.deferToChild,
+          child: Stack(
+            children: [
           Container(
             width: width,
             height: height,
@@ -177,6 +181,8 @@ class WindowItem extends StatelessWidget {
           ),
         ],
       ),
-    ));
+        ),
+      ),
+    );
   }
 }
