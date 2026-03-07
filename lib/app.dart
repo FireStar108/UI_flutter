@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'ui/grid_background.dart';
 import 'ui/window_item.dart';
 import 'ui/taskbar.dart';
+import 'ui/project_manager_dialog.dart';
 import 'ui/flying_window.dart';
 import 'ui/exploding_window.dart';
 import 'core/grid_models.dart';
@@ -426,6 +427,23 @@ class _AppState extends State<App> {
                 ),
                 child: Row(
                   children: [
+                    TextButton.icon(
+                      onPressed: () {
+                        showDialog(
+                          context: context,
+                          barrierDismissible: true,
+                          builder: (context) => const ProjectManagerDialog(),
+                        );
+                      },
+                      icon: const Icon(Icons.account_tree_outlined, color: Colors.blueAccent, size: 20),
+                      label: const Text('PROJECTS', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                      style: TextButton.styleFrom(
+                        backgroundColor: Colors.white.withValues(alpha: 0.1),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                    ),
+                    const SizedBox(width: 24),
                     const Text(
                       'UI Workspace',
                       style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white70, fontSize: 16),
