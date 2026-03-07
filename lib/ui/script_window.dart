@@ -472,8 +472,9 @@ class _ScriptWindowState extends State<ScriptWindow> {
   // ============================================================
 
   Widget _buildCanvas() {
-    return Stack(
-      children: [
+    return ClipRect(
+      child: Stack(
+        children: [
         // Холст (обработка жестов)
         Listener(
           onPointerSignal: (event) {
@@ -622,7 +623,8 @@ class _ScriptWindowState extends State<ScriptWindow> {
             ),
           ),
         ),
-      ],
+        ],
+      ),
     );
   }
 
