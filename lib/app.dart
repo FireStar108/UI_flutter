@@ -92,19 +92,23 @@ class _AppState extends State<App> {
       type: type,
       relativePosition: const Offset(0.1, 0.1),
       relativeSize: type == 'viewport_cam' 
-          ? const Size(0.4, 0.5) // Начальный размер для камеры (ширина, высота - в долях от экрана 0..1)
+          ? const Size(0.4, 0.5)
           : type == 'settings_grid'
-              ? const Size(0.4, 0.5) // Начальный размер для настроек сетки
+              ? const Size(0.4, 0.5)
               : type == 'file_browser'
-                  ? const Size(0.4, 0.5) // Начальный размер для файлового браузера
-                  : const Size(0.4, 0.4),
+                  ? const Size(0.4, 0.5)
+                  : type == 'script'
+                      ? const Size(0.6, 0.7)
+                      : const Size(0.4, 0.4),
       color: type == 'settings_grid' 
           ? Colors.orangeAccent 
           : type == 'file_browser'
               ? Colors.greenAccent
               : type == 'terminal'
                   ? Colors.purpleAccent
-                  : Colors.blueAccent,
+                  : type == 'script'
+                      ? Colors.tealAccent
+                      : Colors.blueAccent,
     );
 
     setState(() {
@@ -631,6 +635,13 @@ class _AppState extends State<App> {
                                     label: 'terminal',
                                     color: Colors.purpleAccent,
                                     onTap: (ctx) => _addWindow('terminal', ctx),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  _buildTypeOption(
+                                    icon: Icons.account_tree_outlined,
+                                    label: 'script',
+                                    color: Colors.tealAccent,
+                                    onTap: (ctx) => _addWindow('script', ctx),
                                   ),
                                 ],
                               ),

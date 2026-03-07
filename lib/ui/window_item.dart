@@ -3,6 +3,7 @@ import 'viewport_cam.dart';
 import 'terminal_window.dart';
 import 'settings_grid.dart';
 import 'file_browser.dart';
+import 'script_window.dart';
 import '../core/grid_models.dart';
 
 class WindowData {
@@ -173,7 +174,9 @@ class WindowItem extends StatelessWidget {
                               ? FileBrowser(accentColor: themeColor, initialDirectory: initialDirectory)
                               : data.type == 'terminal'
                                   ? TerminalWindow(accentColor: themeColor, initialDirectory: initialDirectory)
-                                  : const Center(
+                                  : data.type == 'script'
+                                      ? ScriptWindow(accentColor: themeColor, projectDirectory: initialDirectory)
+                                      : const Center(
                               child: Icon(Icons.window, color: Colors.white30, size: 40),
                             ),
                 ),
