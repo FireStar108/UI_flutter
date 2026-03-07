@@ -356,7 +356,36 @@ class _ScriptWindowState extends State<ScriptWindow> {
     _saveCurrentScript();
   }
 
+  NodeConnection? _hitTestConnection(Offset worldPos) {
+    const double threshold = 10.0;
+    for (final conn in _connections) {
+      final fromNode = _nodes.where((n) => n.id == conn.fromNodeId).firstOrNull;
+      final toNode = _nodes.where((n) => n.id == conn.toNodeId).firstOrNull;
+      if (fromNode == null || toNode == null) continue;
 
+      final start = _getOutputPinWorld(fromNode, conn.fromOutputIndex);
+      final end = _getInputPinWorld(toNode, conn.toInputIndex);
+      
+      final dx = (end.dx - start.dx).abs() * 0.5;
+      final p0 = start;
+      final p1 = Offset(start.dx + dx, start.dy);
+      final p2 = Offset(end.dx - dx, end.dy);
+      final p3 = end;
+
+      // Sample the Bezier curve
+      for (double t = 0; t <= 1.0; t += 0.05) {
+        final t1 = 1 - t;
+        final pos = p0 * (t1 * t1 * t1) +
+                    p1 * (3 * t1 * t1 * t) +
+                    p2 * (3 * t1 * t * t) +
+                    p3 * (t * t * t);
+        if ((worldPos - pos).distance < threshold) {
+          return conn;
+        }
+      }
+    }
+    return null;
+  }
 
   Offset _screenToWorld(Offset screen) {
     return (screen - _canvasOffset) / _canvasScale;
@@ -618,6 +647,21 @@ class _ScriptWindowState extends State<ScriptWindow> {
             if (_hitTestOutputPin(worldPos) == null && _hitTestInputPin(worldPos) == null) {
               setState(() => _selectedNodeId = null);
             }
+          }
+        },
+        onDoubleTap: () {
+          // Double tap doesn't give position directly in basic onDoubleTap, 
+          // we use the last tap position from onDoubleTapDown if needed, 
+          // but we can use GestureDetector's onDoubleTapDown for better precision.
+        },
+        onDoubleTapDown: (details) {
+          final worldPos = _screenToWorld(details.localPosition);
+          final conn = _hitTestConnection(worldPos);
+          if (conn != null) {
+            setState(() {
+              _connections.remove(conn);
+            });
+            _saveCurrentScript();
           }
         },
         onScaleStart: (details) {
@@ -1016,17 +1060,33 @@ class _CanvasPainter extends CustomPainter {
 
   void _drawArrow(Canvas canvas, Offset start, Offset end, Color color) {
     final dx = (end.dx - start.dx).abs() * 0.5;
-    const t = 0.85; final t1 = 1 - t;
-    final midX = t1 * t1 * t1 * start.dx + 3 * t1 * t1 * t * (start.dx + dx) + 3 * t1 * t * t * (end.dx - dx) + t * t * t * end.dx;
-    final midY = t1 * t1 * t1 * start.dy + 3 * t1 * t1 * t * start.dy + 3 * t1 * t * t * end.dy + t * t * t * end.dy;
-    final angle = math.atan2(end.dy - midY, end.dx - midX);
-    const arrowSize = 8.0;
+    const t = 0.52; // Draw arrow in the middle
+    final t1 = 1 - t;
+    
+    // Position slightly before for angle calculation
+    const tPrev = 0.48;
+    final tp1 = 1 - tPrev;
+    
+    final point = start * (t1 * t1 * t1) +
+                  Offset(start.dx + dx, start.dy) * (3 * t1 * t1 * t) +
+                  Offset(end.dx - dx, end.dy) * (3 * t1 * t * t) +
+                  end * (t * t * t);
+                  
+    final prevPoint = start * (tp1 * tp1 * tp1) +
+                      Offset(start.dx + dx, start.dy) * (3 * tp1 * tp1 * tPrev) +
+                      Offset(end.dx - dx, end.dy) * (3 * tp1 * tPrev * tPrev) +
+                      end * (tPrev * tPrev * tPrev);
+
+    final angle = math.atan2(point.dy - prevPoint.dy, point.dx - prevPoint.dx);
+    const arrowSize = 10.0;
+    
     final arrowPath = Path();
-    arrowPath.moveTo(end.dx, end.dy);
-    arrowPath.lineTo(end.dx - arrowSize * math.cos(angle - 0.4), end.dy - arrowSize * math.sin(angle - 0.4));
-    arrowPath.moveTo(end.dx, end.dy);
-    arrowPath.lineTo(end.dx - arrowSize * math.cos(angle + 0.4), end.dy - arrowSize * math.sin(angle + 0.4));
-    canvas.drawPath(arrowPath, Paint()..color = color.withValues(alpha: 0.7)..strokeWidth = 2..style = PaintingStyle.stroke..strokeCap = StrokeCap.round);
+    arrowPath.moveTo(point.dx, point.dy);
+    arrowPath.lineTo(point.dx - arrowSize * math.cos(angle - 0.5), point.dy - arrowSize * math.sin(angle - 0.5));
+    arrowPath.lineTo(point.dx - arrowSize * math.cos(angle + 0.5), point.dy - arrowSize * math.sin(angle + 0.5));
+    arrowPath.close();
+    
+    canvas.drawPath(arrowPath, Paint()..color = color..style = PaintingStyle.fill);
   }
 
   @override
