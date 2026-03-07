@@ -148,6 +148,10 @@ class _ScriptWindowState extends State<ScriptWindow> {
   final TextEditingController _searchController = TextEditingController();
   bool _isLeftPanelOpen = true;
 
+  // Для жестов масштабирования
+  double _baseScale = 1.0;
+  Offset _baseOffset = Offset.zero;
+
   static const double kNodeWidth = 160;
   static const double kNodeHeight = 80;
   static const double kPinRadius = 7;
@@ -489,18 +493,21 @@ class _ScriptWindowState extends State<ScriptWindow> {
         }
       },
       child: GestureDetector(
-        onPanStart: (details) {
-          final worldPos = _screenToWorld(details.localPosition);
+        onScaleStart: (details) {
+          _baseScale = _canvasScale;
+          _baseOffset = _canvasOffset;
+
+          final worldPos = _screenToWorld(details.localFocalPoint);
           final fromNode = _hitTestOutputPin(worldPos);
           if (fromNode != null) {
             _connectingFromNodeId = fromNode;
-            _connectingEndPoint = details.localPosition;
+            _connectingEndPoint = details.localFocalPoint;
             return;
           }
           final nodeId = _hitTestNode(worldPos);
           if (nodeId != null) {
             _draggingNodeId = nodeId;
-            _dragStart = details.localPosition;
+            _dragStart = details.localFocalPoint;
             final idx = _nodes.indexWhere((n) => n.id == nodeId);
             if (idx >= 0) {
               final node = _nodes.removeAt(idx);
@@ -508,24 +515,31 @@ class _ScriptWindowState extends State<ScriptWindow> {
             }
             return;
           }
-          _dragStart = details.localPosition;
+          _dragStart = details.localFocalPoint;
         },
-        onPanUpdate: (details) {
+        onScaleUpdate: (details) {
           setState(() {
             if (_connectingFromNodeId != null) {
-              _connectingEndPoint = details.localPosition;
+              _connectingEndPoint = details.localFocalPoint;
             } else if (_draggingNodeId != null) {
-              final delta = (details.localPosition - _dragStart) / _canvasScale;
+              // Перетаскивание ноды
+              final delta = (details.localFocalPoint - _dragStart) / _canvasScale;
               final node = _nodes.firstWhere((n) => n.id == _draggingNodeId);
               node.position += delta;
-              _dragStart = details.localPosition;
+              _dragStart = details.localFocalPoint;
+            } else if (details.pointerCount > 1) {
+              // Пинч-зум
+              _canvasScale = (_baseScale * details.scale).clamp(0.2, 3.0);
+              final focalScreen = details.localFocalPoint;
+              _canvasOffset = focalScreen - (focalScreen - _baseOffset) * (_canvasScale / _baseScale);
             } else {
-              _canvasOffset += details.localPosition - _dragStart;
-              _dragStart = details.localPosition;
+              // Пан холста
+              _canvasOffset += details.localFocalPoint - _dragStart;
+              _dragStart = details.localFocalPoint;
             }
           });
         },
-        onPanEnd: (details) {
+        onScaleEnd: (details) {
           if (_connectingFromNodeId != null && _connectingEndPoint != null) {
             final worldPos = _screenToWorld(_connectingEndPoint!);
             final hit = _hitTestInputPin(worldPos);
@@ -577,18 +591,61 @@ class _ScriptWindowState extends State<ScriptWindow> {
                 child: Row(
                   children: [
                     if (!_isLeftPanelOpen) _canvasButton(Icons.menu, () => setState(() => _isLeftPanelOpen = true)),
-                    _canvasButton(Icons.center_focus_strong, () { setState(() { _canvasOffset = Offset.zero; _canvasScale = 1.0; }); _saveCurrentScript(); }),
+                    _canvasButton(Icons.center_focus_strong, () { 
+                      setState(() { 
+                        _canvasOffset = Offset.zero; 
+                        _canvasScale = 1.0; 
+                      }); 
+                      _saveCurrentScript(); 
+                    }),
                     const SizedBox(width: 4),
                     _canvasButton(_isShopOpen ? Icons.storefront : Icons.storefront_outlined, () => setState(() => _isShopOpen = !_isShopOpen)),
                   ],
                 ),
               ),
+              // Индикатор масштаба и Ползунок
               Positioned(
                 bottom: 8, left: 8,
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(6)),
-                  child: Text('${(_canvasScale * 100).toInt()}%', style: const TextStyle(color: Colors.white54, fontSize: 11)),
+                  decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.white10)),
+                  child: Row(
+                    children: [
+                      Text('${(_canvasScale * 100).toInt()}%', style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold)),
+                      const SizedBox(width: 12),
+                      SizedBox(
+                        width: 120,
+                        height: 20,
+                        child: SliderTheme(
+                          data: SliderThemeData(
+                            trackHeight: 2,
+                            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                            overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+                            activeTrackColor: widget.accentColor,
+                            inactiveTrackColor: Colors.white10,
+                            thumbColor: Colors.white,
+                          ),
+                          child: Slider(
+                            value: _canvasScale,
+                            min: 0.2,
+                            max: 3.0,
+                            onChanged: (v) {
+                              setState(() {
+                                // При зуме ползунком зумим в центр экрана
+                                final center = context.size != null 
+                                    ? Offset(context.size!.width / 2, context.size!.height / 2)
+                                    : Offset.zero;
+                                final oldScale = _canvasScale;
+                                _canvasScale = v;
+                                _canvasOffset = center - (center - _canvasOffset) * (_canvasScale / oldScale);
+                              });
+                              _saveCurrentScript();
+                            },
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ],
@@ -747,14 +804,26 @@ class _CanvasPainter extends CustomPainter {
   }
 
   void _drawGrid(Canvas canvas, Size size) {
-    final paint = Paint()..color = Colors.white.withValues(alpha: 0.04);
-    const spacing = 30.0;
-    final startX = (offset.dx % (spacing * scale));
-    final startY = (offset.dy % (spacing * scale));
-    for (double x = startX; x < size.width; x += spacing * scale) {
-      for (double y = startY; y < size.height; y += spacing * scale) {
-        canvas.drawCircle(Offset(x, y), 1, paint);
-      }
+    final paint = Paint()..color = Colors.white.withValues(alpha: 0.05)..strokeWidth = 0.5;
+    final paintThick = Paint()..color = Colors.white.withValues(alpha: 0.08)..strokeWidth = 1.0;
+    
+    const double spacing = 40.0;
+    final double scaledSpacing = spacing * scale;
+    
+    final double startX = offset.dx % scaledSpacing;
+    final double startY = offset.dy % scaledSpacing;
+
+    // Вертикальные линии
+    for (double x = startX; x < size.width; x += scaledSpacing) {
+      // Каждая 5-я линия толще
+      final bool isMajor = (((x - offset.dx) / scaledSpacing).round() % 5 == 0);
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), isMajor ? paintThick : paint);
+    }
+
+    // Горизонтальные линии
+    for (double y = startY; y < size.height; y += scaledSpacing) {
+      final bool isMajor = (((y - offset.dy) / scaledSpacing).round() % 5 == 0);
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), isMajor ? paintThick : paint);
     }
   }
 
