@@ -48,18 +48,56 @@ class _ProjectManagerDialogState extends State<ProjectManagerDialog> {
     });
   }
 
-  /// Создать проект: сначала выбрать папку, потом создать config.json внутри неё
+  /// Создать проект: ввести имя → выбрать родительскую папку → создать подпапку
   Future<void> _createNewProject() async {
-    final selectedDir = await FilePicker.platform.getDirectoryPath(
-      dialogTitle: 'Выберите папку для нового проекта',
+    // 1) Спрашиваем имя проекта
+    final nameCtrl = TextEditingController(text: 'New Project');
+    final projectName = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xff2d2d2d),
+        title: const Text('Название проекта', style: TextStyle(color: Colors.white)),
+        content: TextField(
+          controller: nameCtrl,
+          maxLength: 20,
+          autofocus: true,
+          style: const TextStyle(color: Colors.white),
+          decoration: InputDecoration(
+            filled: true,
+            fillColor: Colors.black26,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Отмена')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, nameCtrl.text.trim()),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent),
+            child: const Text('Далее'),
+          ),
+        ],
+      ),
     );
-    if (selectedDir == null) return; // Пользователь отменил
+    nameCtrl.dispose();
+    if (projectName == null || projectName.isEmpty) return;
 
-    final name = selectedDir.split(Platform.pathSeparator).last;
-    final proj = await ProjectService().createProjectInDirectory(
-      name.length > 20 ? name.substring(0, 20) : name,
-      selectedDir,
+    // 2) Выбираем родительскую папку
+    final parentDir = await FilePicker.platform.getDirectoryPath(
+      dialogTitle: 'Выберите где создать папку "$projectName"',
     );
+    if (parentDir == null) return;
+
+    // 3) Создаём подпапку с именем проекта
+    final safeName = projectName.replaceAll(RegExp(r'[^a-zA-Zа-яА-Я0-9_\-\s]'), '').trim().replaceAll(' ', '_');
+    final folderName = safeName.isEmpty ? 'Project_${DateTime.now().millisecondsSinceEpoch}' : safeName;
+    var projectDir = Directory('$parentDir${Platform.pathSeparator}$folderName');
+    int suffix = 1;
+    while (await projectDir.exists()) {
+      projectDir = Directory('$parentDir${Platform.pathSeparator}${folderName}_$suffix');
+      suffix++;
+    }
+
+    final proj = await ProjectService().createProjectInDirectory(projectName, projectDir.path);
     if (!mounted) return;
     setState(() {
       _projects.add(proj);
