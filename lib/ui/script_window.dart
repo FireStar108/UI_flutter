@@ -463,6 +463,18 @@ class _ScriptWindowState extends State<ScriptWindow> {
                 Text('ID: ${node.id}', style: const TextStyle(color: Colors.white24, fontSize: 10)),
                 const SizedBox(height: 24),
                 const Center(child: Text('Меню настроек пусто', style: TextStyle(color: Colors.white38, fontSize: 12))),
+                const SizedBox(height: 32),
+                ElevatedButton.icon(
+                  onPressed: () => _removeNode(_selectedNodeId!),
+                  icon: const Icon(Icons.delete, color: Colors.white, size: 16),
+                  label: const Text('Удалить блок'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.redAccent.withValues(alpha: 0.8),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
               ],
             ),
           ),
@@ -593,6 +605,19 @@ class _ScriptWindowState extends State<ScriptWindow> {
         }
       },
       child: GestureDetector(
+        onTapDown: (details) {
+          final worldPos = _screenToWorld(details.localPosition);
+          final nodeId = _hitTestNode(worldPos);
+          if (nodeId != null) {
+            setState(() => _selectedNodeId = nodeId);
+          } else {
+            // Если кликнули мимо — снимаем выделение
+            // Но только если не кликнули по пину (пины обрабатываются в onScaleStart)
+            if (_hitTestOutputPin(worldPos) == null && _hitTestInputPin(worldPos) == null) {
+              setState(() => _selectedNodeId = null);
+            }
+          }
+        },
         onScaleStart: (details) {
           _baseScale = _canvasScale;
           _baseOffset = _canvasOffset;
@@ -680,6 +705,7 @@ class _ScriptWindowState extends State<ScriptWindow> {
                   connections: _connections,
                   offset: _canvasOffset,
                   scale: _canvasScale,
+                  selectedNodeId: _selectedNodeId,
                   connectingFromNodeId: _connectingFromNodeId,
                   connectingFromOutput: _connectingFromOutput,
                   connectingEndScreen: _connectingEndPoint,
@@ -706,12 +732,9 @@ class _ScriptWindowState extends State<ScriptWindow> {
                   ],
                 ),
               ),
-              // Кнопка удаления выбранной ноды
-              if (_selectedNodeId != null)
-                Positioned(
-                  top: 8, right: 8,
-                  child: _canvasButton(Icons.delete_forever, () => _removeNode(_selectedNodeId!), color: Colors.redAccent),
-                ),
+              // Удаляем кнопку удаления из позиции Позиционированной
+              // Она теперь внутри настроек
+
               // Индикатор масштаба и Ползунок
               Positioned(
                 bottom: 8, left: 8,
@@ -876,6 +899,7 @@ class _CanvasPainter extends CustomPainter {
   final List<NodeConnection> connections;
   final Offset offset;
   final double scale;
+  final String? selectedNodeId;
   final String? connectingFromNodeId;
   final int? connectingFromOutput;
   final Offset? connectingEndScreen;
@@ -885,7 +909,7 @@ class _CanvasPainter extends CustomPainter {
 
   _CanvasPainter({
     required this.nodes, required this.connections, required this.offset, required this.scale,
-    this.connectingFromNodeId, this.connectingFromOutput, this.connectingEndScreen,
+    this.selectedNodeId, this.connectingFromNodeId, this.connectingFromOutput, this.connectingEndScreen,
     required this.getOutputPinWorld, required this.getInputPinWorld, required this.worldToScreen,
   });
 
@@ -939,11 +963,21 @@ class _CanvasPainter extends CustomPainter {
   void _drawNode(Canvas canvas, ScriptNode node) {
     final rect = Rect.fromLTWH(node.position.dx, node.position.dy, _ScriptWindowState.kNodeWidth, _ScriptWindowState.kNodeHeight);
     final color = node.definition.color;
-    canvas.drawRRect(RRect.fromRectAndRadius(rect.inflate(2), const Radius.circular(8)), Paint()..color = color.withValues(alpha: 0.15)..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8));
+    final isSelected = node.id == selectedNodeId;
+    
+    // Тень/Свечение
+    canvas.drawRRect(RRect.fromRectAndRadius(rect.inflate(isSelected ? 4 : 2), const Radius.circular(8)), Paint()..color = (isSelected ? Colors.white : color).withValues(alpha: 0.15)..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8));
+    
+    // Фон
     canvas.drawRRect(RRect.fromRectAndRadius(rect, const Radius.circular(8)), Paint()..color = const Color(0xff222222));
-    canvas.drawRRect(RRect.fromRectAndRadius(rect, const Radius.circular(8)), Paint()..style = PaintingStyle.stroke..color = color..strokeWidth = 1.5);
+    
+    // Рамка (если выбрано — ярче и толще)
+    canvas.drawRRect(RRect.fromRectAndRadius(rect, const Radius.circular(8)), Paint()..style = PaintingStyle.stroke..color = isSelected ? Colors.white : color..strokeWidth = isSelected ? 2.5 : 1.5);
+    
+    // Заголовок
     canvas.drawRRect(RRect.fromRectAndCorners(Rect.fromLTWH(rect.left, rect.top, rect.width, 24), topLeft: const Radius.circular(8), topRight: const Radius.circular(8)), Paint()..color = color.withValues(alpha: 0.3));
     TextPainter(text: TextSpan(text: node.definition.name, style: TextStyle(color: Colors.white, fontSize: 11 / scale.clamp(0.5, 1.5), fontWeight: FontWeight.bold)), textDirection: TextDirection.ltr)..layout(maxWidth: rect.width - 16)..paint(canvas, Offset(rect.left + 8, rect.top + 5));
+    
     for (int i = 0; i < node.definition.inputs; i++) { _drawPin(canvas, Offset(node.position.dx, node.position.dy + _ScriptWindowState.kNodeHeight / 2 + (i - (node.definition.inputs - 1) / 2.0) * 24), color, true); }
     for (int i = 0; i < node.definition.outputs; i++) { _drawPin(canvas, Offset(node.position.dx + _ScriptWindowState.kNodeWidth, node.position.dy + _ScriptWindowState.kNodeHeight / 2 + (i - (node.definition.outputs - 1) / 2.0) * 24), color, false); }
   }
