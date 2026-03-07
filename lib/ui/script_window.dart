@@ -144,6 +144,7 @@ class _ScriptWindowState extends State<ScriptWindow> {
   Offset? _connectingEndPoint;
 
   bool _isShopOpen = true;
+  String? _selectedNodeId;
   String _searchQuery = '';
   final TextEditingController _searchController = TextEditingController();
   bool _isLeftPanelOpen = true;
@@ -278,6 +279,7 @@ class _ScriptWindowState extends State<ScriptWindow> {
           _canvasOffset = Offset.zero;
         }
         _canvasScale = data['scale'] ?? 1.0;
+        _selectedNodeId = null;
       });
     } catch (e) {
       // Silent error
@@ -287,6 +289,44 @@ class _ScriptWindowState extends State<ScriptWindow> {
         _connections.clear();
         _canvasOffset = Offset.zero;
         _canvasScale = 1.0;
+        _selectedNodeId = null;
+      });
+    }
+  }
+
+  Future<void> _deleteScript(String name) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xff2d2d2d),
+        title: const Text('Удалить скрипт?', style: TextStyle(color: Colors.white)),
+        content: Text('Скрипт "$name" будет безвозвратно удален.', style: const TextStyle(color: Colors.white70)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            child: const Text('Удалить'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      final file = File(p.join(_scriptsDir, '$name.json'));
+      if (await file.exists()) {
+        try {
+          await file.delete();
+        } catch (_) {}
+      }
+      setState(() {
+        _scripts.remove(name);
+        if (_activeScript == name) {
+          _activeScript = null;
+          _nodes.clear();
+          _connections.clear();
+          _selectedNodeId = null;
+        }
       });
     }
   }
@@ -294,11 +334,22 @@ class _ScriptWindowState extends State<ScriptWindow> {
   void _addNodeToCanvas(BlockDefinition def, Offset position) {
     final worldPos = _screenToWorld(position);
     setState(() {
+      final newNodeId = '${def.id}_${DateTime.now().millisecondsSinceEpoch}';
       _nodes.add(ScriptNode(
-        id: '${def.id}_${DateTime.now().millisecondsSinceEpoch}',
+        id: newNodeId,
         definition: def,
         position: worldPos,
       ));
+      _selectedNodeId = newNodeId;
+    });
+    _saveCurrentScript();
+  }
+
+  void _removeNode(String nodeId) {
+    setState(() {
+      _nodes.removeWhere((n) => n.id == nodeId);
+      _connections.removeWhere((c) => c.fromNodeId == nodeId || c.toNodeId == nodeId);
+      if (_selectedNodeId == nodeId) _selectedNodeId = null;
     });
     _saveCurrentScript();
   }
@@ -372,7 +423,49 @@ class _ScriptWindowState extends State<ScriptWindow> {
                 ? _buildEmptyCanvas()
                 : _buildCanvas(),
           ),
-          if (_isShopOpen && _activeScript != null) _buildShopPanel(),
+          if (_activeScript != null && (_isShopOpen || _selectedNodeId != null))
+            _buildRightPanel(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRightPanel() {
+    if (_selectedNodeId != null) return _buildSettingsPanel();
+    return _buildShopPanel();
+  }
+
+  Widget _buildSettingsPanel() {
+    final node = _nodes.firstWhere((n) => n.id == _selectedNodeId, orElse: () => _nodes.first);
+    return Container(
+      width: 220,
+      decoration: const BoxDecoration(color: Color(0xff141414), border: Border(left: BorderSide(color: Colors.white10))),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                Icon(Icons.settings, color: node.definition.color, size: 18),
+                const SizedBox(width: 8),
+                const Expanded(child: Text('Настройки', style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold))),
+                InkWell(onTap: () => setState(() => _selectedNodeId = null), child: const Icon(Icons.close, color: Colors.white38, size: 18)),
+              ],
+            ),
+          ),
+          const Divider(color: Colors.white10, height: 1),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                Text(node.definition.name, style: TextStyle(color: node.definition.color, fontSize: 16, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                Text('ID: ${node.id}', style: const TextStyle(color: Colors.white24, fontSize: 10)),
+                const SizedBox(height: 24),
+                const Center(child: Text('Меню настроек пусто', style: TextStyle(color: Colors.white38, fontSize: 12))),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -444,6 +537,13 @@ class _ScriptWindowState extends State<ScriptWindow> {
                         Icon(Icons.description, color: isActive ? widget.accentColor : Colors.white38, size: 14),
                         const SizedBox(width: 8),
                         Expanded(child: Text(name, style: TextStyle(color: isActive ? Colors.white : Colors.white54, fontSize: 12, fontWeight: isActive ? FontWeight.bold : FontWeight.normal), overflow: TextOverflow.ellipsis)),
+                        if (isActive) 
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline, size: 16, color: Colors.redAccent),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                            onPressed: () => _deleteScript(name),
+                          ),
                       ],
                     ),
                   ),
@@ -504,10 +604,12 @@ class _ScriptWindowState extends State<ScriptWindow> {
             _connectingEndPoint = details.localFocalPoint;
             return;
           }
+          // Проверяем, попали ли на ноду
           final nodeId = _hitTestNode(worldPos);
           if (nodeId != null) {
             _draggingNodeId = nodeId;
             _dragStart = details.localFocalPoint;
+            setState(() => _selectedNodeId = nodeId);
             final idx = _nodes.indexWhere((n) => n.id == nodeId);
             if (idx >= 0) {
               final node = _nodes.removeAt(idx);
@@ -515,6 +617,7 @@ class _ScriptWindowState extends State<ScriptWindow> {
             }
             return;
           }
+          setState(() => _selectedNodeId = null);
           _dragStart = details.localFocalPoint;
         },
         onScaleUpdate: (details) {
@@ -599,10 +702,16 @@ class _ScriptWindowState extends State<ScriptWindow> {
                       _saveCurrentScript(); 
                     }),
                     const SizedBox(width: 4),
-                    _canvasButton(_isShopOpen ? Icons.storefront : Icons.storefront_outlined, () => setState(() => _isShopOpen = !_isShopOpen)),
+                    _canvasButton(_isShopOpen ? Icons.storefront : Icons.storefront_outlined, () => setState(() { _isShopOpen = !_isShopOpen; if (_isShopOpen) _selectedNodeId = null; })),
                   ],
                 ),
               ),
+              // Кнопка удаления выбранной ноды
+              if (_selectedNodeId != null)
+                Positioned(
+                  top: 8, right: 8,
+                  child: _canvasButton(Icons.delete_forever, () => _removeNode(_selectedNodeId!), color: Colors.redAccent),
+                ),
               // Индикатор масштаба и Ползунок
               Positioned(
                 bottom: 8, left: 8,
@@ -655,7 +764,7 @@ class _ScriptWindowState extends State<ScriptWindow> {
     );
   }
 
-  Widget _canvasButton(IconData icon, VoidCallback onTap) {
+  Widget _canvasButton(IconData icon, VoidCallback onTap, {Color? color}) {
     return Padding(
       padding: const EdgeInsets.only(right: 4),
       child: InkWell(
@@ -664,7 +773,7 @@ class _ScriptWindowState extends State<ScriptWindow> {
         child: Container(
           padding: const EdgeInsets.all(6),
           decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.white10)),
-          child: Icon(icon, color: Colors.white54, size: 16),
+          child: Icon(icon, color: color ?? Colors.white54, size: 16),
         ),
       ),
     );
