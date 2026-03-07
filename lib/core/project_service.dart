@@ -24,7 +24,7 @@ class ProjectModel {
     this.gridModeId = 'system',
     this.gridData,
     List<WindowData>? windows,
-  }) : this.windows = windows ?? [];
+  }) : windows = windows ?? [];
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -58,89 +58,80 @@ class ProjectService {
   factory ProjectService() => _instance;
   ProjectService._internal();
 
-  /// Главная папка для хранения проектов
-  Future<Directory> getWorkspaceDirectory() async {
+  /// Папка для хранения реестра проектов
+  Future<Directory> _getAppDataDir() async {
     final docs = await getApplicationDocumentsDirectory();
-    final workspace = Directory(p.join(docs.path, 'UI_Flutter_Workspace'));
-    if (!await workspace.exists()) {
-      await workspace.create(recursive: true);
+    final dir = Directory(p.join(docs.path, 'UI_Flutter_Workspace'));
+    if (!await dir.exists()) {
+      await dir.create(recursive: true);
     }
-    return workspace;
+    return dir;
   }
 
-  /// Получить все существующие проекты
+  /// Файл-реестр: список путей ко всем проектам
+  Future<File> _getRegistryFile() async {
+    final appDir = await _getAppDataDir();
+    return File(p.join(appDir.path, 'registry.json'));
+  }
+
+  /// Читаем список путей из реестра
+  Future<List<String>> _loadRegistry() async {
+    final file = await _getRegistryFile();
+    if (!await file.exists()) return [];
+    try {
+      final content = await file.readAsString();
+      final list = jsonDecode(content) as List;
+      return list.cast<String>();
+    } catch (e) {
+      return [];
+    }
+  }
+
+  /// Сохраняем список путей в реестр
+  Future<void> _saveRegistry(List<String> paths) async {
+    final file = await _getRegistryFile();
+    await file.writeAsString(jsonEncode(paths));
+  }
+
+  /// Добавить путь в реестр (если ещё нет)
+  Future<void> _registerProject(String dirPath) async {
+    final paths = await _loadRegistry();
+    if (!paths.contains(dirPath)) {
+      paths.add(dirPath);
+      await _saveRegistry(paths);
+    }
+  }
+
+  /// Удалить путь из реестра
+  Future<void> _unregisterProject(String dirPath) async {
+    final paths = await _loadRegistry();
+    paths.remove(dirPath);
+    await _saveRegistry(paths);
+  }
+
+  /// Загрузить все проекты из реестра
   Future<List<ProjectModel>> loadProjects() async {
-    final workspace = await getWorkspaceDirectory();
+    final paths = await _loadRegistry();
     final List<ProjectModel> projects = [];
 
-    await for (var entity in workspace.list(followLinks: false)) {
-      if (entity is Directory) {
-        final configFile = File(p.join(entity.path, 'config.json'));
-        if (await configFile.exists()) {
-          try {
-            final content = await configFile.readAsString();
-            final json = jsonDecode(content);
-            projects.add(ProjectModel.fromJson(json));
-          } catch (e) {
-             print('Error reading project config in ${entity.path}: $e');
-          }
+    for (final dirPath in paths) {
+      final configFile = File(p.join(dirPath, 'config.json'));
+      if (await configFile.exists()) {
+        try {
+          final content = await configFile.readAsString();
+          final json = jsonDecode(content);
+          projects.add(ProjectModel.fromJson(json));
+        } catch (e) {
+          // Пропускаем битые конфиги
         }
       }
     }
-    
-    // Сортировка по имени (может быть и по дате, если добавить)
+
     projects.sort((a, b) => a.name.compareTo(b.name));
     return projects;
   }
 
-  /// Создать новый проект на диске
-  Future<ProjectModel> createProject(String name) async {
-    final workspace = await getWorkspaceDirectory();
-    final id = DateTime.now().millisecondsSinceEpoch.toString();
-    // Делаем безопасное имя папки
-    final sanitizeName = name.replaceAll(RegExp(r'[^a-zA-Z0-9_\-\s]'), '').trim();
-    final safeFolderName = sanitizeName.isEmpty ? 'Project_$id' : sanitizeName.replaceAll(' ', '_');
-    
-    var dir = Directory(p.join(workspace.path, safeFolderName));
-    // Если папка существует, добавляем суффикс
-    int suffix = 1;
-    while (await dir.exists()) {
-      dir = Directory(p.join(workspace.path, '${safeFolderName}_$suffix'));
-      suffix++;
-    }
-    
-    await dir.create(recursive: true);
-    
-    final project = ProjectModel(
-      id: id,
-      name: name,
-      directoryPath: dir.path,
-    );
-    
-    await updateProject(project);
-    return project;
-  }
-
-  /// Сохранить настройки проекта
-  Future<void> updateProject(ProjectModel project) async {
-    final dir = Directory(project.directoryPath);
-    if (!await dir.exists()) {
-      await dir.create(recursive: true);
-    }
-    
-    final configFile = File(p.join(dir.path, 'config.json'));
-    await configFile.writeAsString(jsonEncode(project.toJson()));
-  }
-
-  /// Удалить проект (удаляем только config.json, не папку пользователя)
-  Future<void> deleteProject(ProjectModel project) async {
-    final configFile = File(p.join(project.directoryPath, 'config.json'));
-    if (await configFile.exists()) {
-      await configFile.delete();
-    }
-  }
-
-  /// Создать проект в конкретной выбранной пользователем папке
+  /// Создать проект в указанной директории
   Future<ProjectModel> createProjectInDirectory(String name, String dirPath) async {
     final id = DateTime.now().millisecondsSinceEpoch.toString();
     final dir = Directory(dirPath);
@@ -155,10 +146,46 @@ class ProjectService {
     );
 
     await updateProject(project);
+    await _registerProject(dir.path);
     return project;
   }
 
-  /// Открыть проект из существующей папки (прочитать config.json если есть, или создать новый)
+  /// Создать проект в дефолтной папке (для первого запуска)
+  Future<ProjectModel> createProject(String name) async {
+    final appDir = await _getAppDataDir();
+    final safeName = name.replaceAll(RegExp(r'[^a-zA-Z0-9_\-\s]'), '').trim().replaceAll(' ', '_');
+    final folderName = safeName.isEmpty ? 'Project_${DateTime.now().millisecondsSinceEpoch}' : safeName;
+    
+    var dir = Directory(p.join(appDir.path, folderName));
+    int suffix = 1;
+    while (await dir.exists()) {
+      dir = Directory(p.join(appDir.path, '${folderName}_$suffix'));
+      suffix++;
+    }
+    
+    return createProjectInDirectory(name, dir.path);
+  }
+
+  /// Сохранить настройки проекта на диск
+  Future<void> updateProject(ProjectModel project) async {
+    final dir = Directory(project.directoryPath);
+    if (!await dir.exists()) {
+      await dir.create(recursive: true);
+    }
+    final configFile = File(p.join(dir.path, 'config.json'));
+    await configFile.writeAsString(jsonEncode(project.toJson()));
+  }
+
+  /// Удалить проект из реестра и удалить config.json
+  Future<void> deleteProject(ProjectModel project) async {
+    final configFile = File(p.join(project.directoryPath, 'config.json'));
+    if (await configFile.exists()) {
+      await configFile.delete();
+    }
+    await _unregisterProject(project.directoryPath);
+  }
+
+  /// Открыть проект из папки (если config.json есть — читаем, если нет — создаём)
   Future<ProjectModel?> openProjectFromDirectory(String dirPath) async {
     final dir = Directory(dirPath);
     if (!await dir.exists()) return null;
@@ -168,13 +195,13 @@ class ProjectService {
       try {
         final content = await configFile.readAsString();
         final json = jsonDecode(content);
-        return ProjectModel.fromJson(json);
-      } catch (e) {
-        print('Error reading config.json in $dirPath: $e');
-      }
+        final proj = ProjectModel.fromJson(json);
+        await _registerProject(dirPath);
+        return proj;
+      } catch (_) {}
     }
 
-    // Если config.json нет — создаём новый проект в этой папке
+    // config.json нет — создаём новый
     final folderName = dirPath.split(Platform.pathSeparator).last;
     return createProjectInDirectory(
       folderName.length > 20 ? folderName.substring(0, 20) : folderName,
