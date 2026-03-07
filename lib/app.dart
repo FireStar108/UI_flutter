@@ -30,6 +30,7 @@ class _AppState extends State<App> {
   GridMetadata? _customGridMetadata;
   Offset? _previewPosition;
   Size? _previewSize;
+  String _projectName = 'UI Workspace';
 
   @override
   void initState() {
@@ -427,15 +428,21 @@ class _AppState extends State<App> {
                 ),
                 child: Row(
                   children: [
-                    TextButton.icon(
-                      onPressed: () {
-                        showDialog(
-                          context: context,
-                          barrierDismissible: true,
-                          builder: (context) => const ProjectManagerDialog(),
-                        );
-                      },
-                      icon: const Icon(Icons.account_tree_outlined, color: Colors.blueAccent, size: 20),
+                    Builder(
+                      builder: (btnContext) => TextButton.icon(
+                        onPressed: () async {
+                          final proj = await showDialog<MockProject>(
+                            context: btnContext,
+                            barrierDismissible: true,
+                            builder: (context) => const ProjectManagerDialog(),
+                          );
+                          if (proj != null) {
+                            setState(() {
+                              _projectName = proj.name;
+                            });
+                          }
+                        },
+                        icon: const Icon(Icons.account_tree_outlined, color: Colors.blueAccent, size: 20),
                       label: const Text('PROJECTS', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                       style: TextButton.styleFrom(
                         backgroundColor: Colors.white.withValues(alpha: 0.1),
@@ -443,10 +450,11 @@ class _AppState extends State<App> {
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                       ),
                     ),
+                    ),
                     const SizedBox(width: 24),
-                    const Text(
-                      'UI Workspace',
-                      style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white70, fontSize: 16),
+                    Text(
+                      _projectName,
+                      style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white70, fontSize: 16),
                     ),
                     const SizedBox(width: 24),
                     // Панель задач здесь
@@ -547,7 +555,7 @@ class _AppState extends State<App> {
                         AnimatedPositioned(
                           duration: const Duration(milliseconds: 300),
                           curve: Curves.easeInOutCubic,
-                          top: _isAddPanelVisible ? 10 : -200, // Выезжает сверху
+                          top: _isAddPanelVisible ? 70 : -200, // Выезжает сверху
                           left: 0,
                           right: 0,
                           child: Center(
@@ -597,7 +605,7 @@ class _AppState extends State<App> {
                         AnimatedPositioned(
                           duration: const Duration(milliseconds: 300),
                           curve: Curves.easeInOutCubic,
-                          top: _isSettingsPanelVisible ? 10 : -200, // Выезжает сверху
+                          top: _isSettingsPanelVisible ? 70 : -200, // Выезжает сверху
                           left: 0,
                           right: 0,
                           child: Center(
