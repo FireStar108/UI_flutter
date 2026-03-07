@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:xterm/xterm.dart';
 import 'package:flutter_pty/flutter_pty.dart';
@@ -59,7 +60,7 @@ class _TerminalWindowState extends State<TerminalWindow> {
     _startPty(session);
 
     terminal.onOutput = (String data) {
-      session.pty?.write(Uint8List.fromList(data.codeUnits));
+      session.pty?.write(Uint8List.fromList(utf8.encode(data)));
     };
 
     terminal.onResize = (int width, int height, int pixelWidth, int pixelHeight) {
@@ -84,8 +85,8 @@ class _TerminalWindowState extends State<TerminalWindow> {
         workingDirectory: _workingDirectory,
       );
 
-      pty.output.cast<List<int>>().listen((data) {
-        session.terminal.write(String.fromCharCodes(data));
+      pty.output.cast<List<int>>().transform(const Utf8Decoder(allowMalformed: true)).listen((text) {
+        session.terminal.write(text);
       });
 
       pty.exitCode.then((code) {
@@ -298,6 +299,7 @@ class _TerminalWindowState extends State<TerminalWindow> {
                       final session = _sessions.firstWhere((s) => s.id == _activeSessionId, orElse: () => _sessions.first);
                       return TerminalView(
                         session.terminal,
+                        key: ValueKey('TerminalView-${session.id}'),
                         controller: _terminalController,
                         autofocus: true,
                         backgroundOpacity: 0.0,

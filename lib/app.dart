@@ -85,7 +85,9 @@ class _AppState extends State<App> {
           ? Colors.orangeAccent 
           : type == 'file_browser'
               ? Colors.greenAccent
-              : Colors.blueAccent,
+              : type == 'terminal'
+                  ? Colors.purpleAccent
+                  : Colors.blueAccent,
     );
 
     setState(() {
@@ -503,7 +505,7 @@ class _AppState extends State<App> {
                             isHidden: w.isMinimized || w.isFlying,
                             isShiftPressed: _isShiftPressed,
                             screenSize: workAreaSize,
-                            themeColor: GridMetadata.fromMode(_currentGridMode, customData: _customGridMetadata).color,
+                            themeColor: w.color,
                              onGridModeChanged: (mode, metadata) {
                                   setState(() {
                                     _currentGridMode = mode;
