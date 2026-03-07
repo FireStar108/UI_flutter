@@ -7,7 +7,8 @@ enum FileViewMode { list, table }
 
 class FileBrowser extends StatefulWidget {
   final Color accentColor;
-  const FileBrowser({super.key, required this.accentColor});
+  final String? initialDirectory;
+  const FileBrowser({super.key, required this.accentColor, this.initialDirectory});
 
   @override
   State<FileBrowser> createState() => _FileBrowserState();
@@ -22,6 +23,10 @@ class _FileBrowserState extends State<FileBrowser> {
   @override
   void initState() {
     super.initState();
+    if (widget.initialDirectory != null) {
+      _currentPath = widget.initialDirectory;
+      _refresh();
+    }
   }
 
   Future<void> _pickDirectory() async {

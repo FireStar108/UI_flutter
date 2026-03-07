@@ -1,4 +1,6 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
 import '../core/project_service.dart';
 
 class ProjectManagerDialog extends StatefulWidget {
@@ -23,10 +25,11 @@ class _ProjectManagerDialogState extends State<ProjectManagerDialog> {
 
   Future<void> _loadProjects() async {
     final projs = await ProjectService().loadProjects();
+    if (!mounted) return;
     setState(() {
       _projects = projs;
       _isLoading = false;
-      if (_projects.isNotEmpty) {
+      if (_projects.isNotEmpty && _selectedProject == null) {
         _selectProject(_projects.first);
       }
     });
@@ -45,11 +48,40 @@ class _ProjectManagerDialogState extends State<ProjectManagerDialog> {
     });
   }
 
+  /// Создать проект: сначала выбрать папку, потом создать config.json внутри неё
   Future<void> _createNewProject() async {
-    final newProj = await ProjectService().createProject('New Project ${_projects.length + 1}');
+    final selectedDir = await FilePicker.platform.getDirectoryPath(
+      dialogTitle: 'Выберите папку для нового проекта',
+    );
+    if (selectedDir == null) return; // Пользователь отменил
+
+    final name = selectedDir.split(Platform.pathSeparator).last;
+    final proj = await ProjectService().createProjectInDirectory(
+      name.length > 20 ? name.substring(0, 20) : name,
+      selectedDir,
+    );
+    if (!mounted) return;
     setState(() {
-      _projects.add(newProj);
-      _selectProject(newProj);
+      _projects.add(proj);
+      _selectProject(proj);
+    });
+  }
+
+  /// Открыть существующий проект: выбрать папку с config.json
+  Future<void> _openExistingProject() async {
+    final selectedDir = await FilePicker.platform.getDirectoryPath(
+      dialogTitle: 'Выберите папку существующего проекта',
+    );
+    if (selectedDir == null) return;
+
+    final proj = await ProjectService().openProjectFromDirectory(selectedDir);
+    if (proj == null || !mounted) return;
+
+    // Проверяем, что проект ещё не в списке
+    final exists = _projects.any((p) => p.directoryPath == proj.directoryPath);
+    setState(() {
+      if (!exists) _projects.add(proj);
+      _selectProject(proj);
     });
   }
 
@@ -64,7 +96,7 @@ class _ProjectManagerDialogState extends State<ProjectManagerDialog> {
     return Dialog(
       backgroundColor: Colors.transparent,
       elevation: 0,
-      insetPadding: const EdgeInsets.all(32), // Оставляем немного места по краям
+      insetPadding: const EdgeInsets.all(32),
       child: Container(
         decoration: BoxDecoration(
           color: const Color(0xff1e1e1e),
@@ -80,7 +112,7 @@ class _ProjectManagerDialogState extends State<ProjectManagerDialog> {
         ),
         child: Column(
           children: [
-            // Header / Close button
+            // Header
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: const BoxDecoration(
@@ -98,7 +130,7 @@ class _ProjectManagerDialogState extends State<ProjectManagerDialog> {
                 ],
               ),
             ),
-            // Body Panels
+            // Body
             Expanded(
               child: Row(
                 children: [
@@ -113,16 +145,34 @@ class _ProjectManagerDialogState extends State<ProjectManagerDialog> {
                     child: Column(
                       children: [
                         Padding(
-                          padding: const EdgeInsets.all(16.0),
+                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
                           child: SizedBox(
                             width: double.infinity,
                             child: ElevatedButton.icon(
                               onPressed: _createNewProject,
                               icon: const Icon(Icons.add, size: 18),
-                              label: const Text('Создать новый проект'),
+                              label: const Text('Создать проект'),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.blueAccent.withValues(alpha: 0.2),
                                 foregroundColor: Colors.blueAccent,
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                elevation: 0,
+                              ),
+                            ),
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                          child: SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton.icon(
+                              onPressed: _openExistingProject,
+                              icon: const Icon(Icons.folder_open, size: 18),
+                              label: const Text('Открыть проект'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.greenAccent.withValues(alpha: 0.15),
+                                foregroundColor: Colors.greenAccent,
                                 padding: const EdgeInsets.symmetric(vertical: 12),
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                 elevation: 0,
@@ -148,11 +198,19 @@ class _ProjectManagerDialogState extends State<ProjectManagerDialog> {
                                     fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                                   ),
                                 ),
+                                subtitle: Text(
+                                  proj.directoryPath,
+                                  style: const TextStyle(color: Colors.white24, fontSize: 10),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                                 trailing: IconButton(
                                   icon: const Icon(Icons.delete_outline, color: Colors.white24, size: 18),
                                   onPressed: () async {
                                     await ProjectService().deleteProject(proj);
-                                    _loadProjects(); // Перезагружаем список
+                                    if (_selectedProject?.id == proj.id) {
+                                      _selectedProject = null;
+                                    }
+                                    _loadProjects();
                                   },
                                 ),
                                 onTap: () => _selectProject(proj),
@@ -170,103 +228,132 @@ class _ProjectManagerDialogState extends State<ProjectManagerDialog> {
                       padding: const EdgeInsets.all(32),
                       child: _selectedProject == null
                           ? const Center(child: Text('Выберите проект для настройки', style: TextStyle(color: Colors.white54)))
-                          : Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text('Настройки проекта', style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
-                                const SizedBox(height: 32),
-                                
-                                // Name field
-                                const Text('Название', style: TextStyle(color: Colors.white54, fontSize: 12)),
-                                const SizedBox(height: 8),
-                                TextField(
-                                  controller: _nameController,
-                                  maxLength: 20,
-                                  style: const TextStyle(color: Colors.white),
-                                  decoration: InputDecoration(
-                                    filled: true,
-                                    fillColor: Colors.black26,
-                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
-                                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Colors.blueAccent)),
-                                  ),
-                                  onChanged: (val) {
-                                    setState(() {
-                                      _selectedProject!.name = val;
-                                    });
-                                    _saveCurrentProject();
-                                  },
-                                ),
-                                const SizedBox(height: 24),
-                                
-                                // Preset Selector
-                                const Text('Пресет (Preset)', style: TextStyle(color: Colors.white54, fontSize: 12)),
-                                const SizedBox(height: 8),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                                  decoration: BoxDecoration(
-                                    color: Colors.black26,
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: DropdownButtonHideUnderline(
-                                    child: DropdownButton<String>(
-                                      value: _selectedProject!.preset,
-                                      isExpanded: true,
-                                      dropdownColor: const Color(0xff2d2d2d),
-                                      style: const TextStyle(color: Colors.white),
-                                      items: const [
-                                        DropdownMenuItem(value: 'default', child: Text('Default Profile')),
-                                        DropdownMenuItem(value: 'custom', child: Text('Custom Configuration')),
-                                      ],
-                                      onChanged: (val) {
-                                        if (val != null) {
-                                          setState(() => _selectedProject!.preset = val);
-                                          _saveCurrentProject();
-                                        }
-                                      },
+                          : SingleChildScrollView(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text('Настройки проекта', style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
+                                  const SizedBox(height: 32),
+                                  
+                                  // Name field
+                                  const Text('Название', style: TextStyle(color: Colors.white54, fontSize: 12)),
+                                  const SizedBox(height: 8),
+                                  TextField(
+                                    controller: _nameController,
+                                    maxLength: 20,
+                                    style: const TextStyle(color: Colors.white),
+                                    decoration: InputDecoration(
+                                      filled: true,
+                                      fillColor: Colors.black26,
+                                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Colors.blueAccent)),
                                     ),
-                                  ),
-                                ),
-                                const SizedBox(height: 24),
-                                
-                                // CUDA Settings
-                                const Text('Аппаратное ускорение', style: TextStyle(color: Colors.white54, fontSize: 12)),
-                                const SizedBox(height: 8),
-                                CheckboxListTile(
-                                  title: const Text('Использовать CUDA ядра', style: TextStyle(color: Colors.white)),
-                                  subtitle: const Text('Ускоряет вычисления за счет видеокарты (если поддерживается)', style: TextStyle(color: Colors.white38, fontSize: 12)),
-                                  value: _selectedProject!.useCuda,
-                                  onChanged: (val) {
-                                    setState(() => _selectedProject!.useCuda = val ?? false);
-                                    _saveCurrentProject();
-                                  },
-                                  activeColor: Colors.blueAccent,
-                                  checkColor: Colors.white,
-                                  contentPadding: EdgeInsets.zero,
-                                  controlAffinity: ListTileControlAffinity.leading,
-                                ),
-                                
-                                const Spacer(),
-                                
-                                // Save / Open button
-                                Align(
-                                  alignment: Alignment.bottomRight,
-                                  child: ElevatedButton.icon(
-                                    onPressed: () {
-                                      _saveCurrentProject().then((_) {
-                                        Navigator.of(context).pop(_selectedProject);
+                                    onChanged: (val) {
+                                      setState(() {
+                                        _selectedProject!.name = val;
                                       });
+                                      _saveCurrentProject();
                                     },
-                                    icon: const Icon(Icons.check),
-                                    label: const Text('СОХРАНИТЬ И ОТКРЫТЬ'),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.blueAccent,
-                                      foregroundColor: Colors.white,
-                                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  
+                                  // Directory display
+                                  const Text('Директория проекта', style: TextStyle(color: Colors.white54, fontSize: 12)),
+                                  const SizedBox(height: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                    decoration: BoxDecoration(
+                                      color: Colors.black26,
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        const Icon(Icons.folder, color: Colors.white38, size: 18),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            _selectedProject!.directoryPath,
+                                            style: const TextStyle(color: Colors.white70, fontSize: 13),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
-                                ),
-                              ],
+                                  const SizedBox(height: 24),
+                                  
+                                  // Preset Selector
+                                  const Text('Пресет (Preset)', style: TextStyle(color: Colors.white54, fontSize: 12)),
+                                  const SizedBox(height: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                                    decoration: BoxDecoration(
+                                      color: Colors.black26,
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: DropdownButtonHideUnderline(
+                                      child: DropdownButton<String>(
+                                        value: _selectedProject!.preset,
+                                        isExpanded: true,
+                                        dropdownColor: const Color(0xff2d2d2d),
+                                        style: const TextStyle(color: Colors.white),
+                                        items: const [
+                                          DropdownMenuItem(value: 'default', child: Text('Default Profile')),
+                                          DropdownMenuItem(value: 'custom', child: Text('Custom Configuration')),
+                                        ],
+                                        onChanged: (val) {
+                                          if (val != null) {
+                                            setState(() => _selectedProject!.preset = val);
+                                            _saveCurrentProject();
+                                          }
+                                        },
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 24),
+                                  
+                                  // CUDA Settings
+                                  const Text('Аппаратное ускорение', style: TextStyle(color: Colors.white54, fontSize: 12)),
+                                  const SizedBox(height: 8),
+                                  CheckboxListTile(
+                                    title: const Text('Использовать CUDA ядра', style: TextStyle(color: Colors.white)),
+                                    subtitle: const Text('Ускоряет вычисления за счет видеокарты (если поддерживается)', style: TextStyle(color: Colors.white38, fontSize: 12)),
+                                    value: _selectedProject!.useCuda,
+                                    onChanged: (val) {
+                                      setState(() => _selectedProject!.useCuda = val ?? false);
+                                      _saveCurrentProject();
+                                    },
+                                    activeColor: Colors.blueAccent,
+                                    checkColor: Colors.white,
+                                    contentPadding: EdgeInsets.zero,
+                                    controlAffinity: ListTileControlAffinity.leading,
+                                  ),
+                                  
+                                  const SizedBox(height: 32),
+                                  
+                                  // Save / Open button
+                                  Align(
+                                    alignment: Alignment.bottomRight,
+                                    child: ElevatedButton.icon(
+                                      onPressed: () {
+                                        _saveCurrentProject().then((_) {
+                                          if (mounted) {
+                                            Navigator.of(context).pop(_selectedProject);
+                                          }
+                                        });
+                                      },
+                                      icon: const Icon(Icons.check),
+                                      label: const Text('СОХРАНИТЬ И ОТКРЫТЬ'),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.blueAccent,
+                                        foregroundColor: Colors.white,
+                                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                     ),
                   ),

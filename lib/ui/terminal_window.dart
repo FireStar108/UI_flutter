@@ -17,8 +17,9 @@ class TerminalSession {
 
 class TerminalWindow extends StatefulWidget {
   final Color accentColor;
+  final String? initialDirectory;
 
-  const TerminalWindow({super.key, required this.accentColor});
+  const TerminalWindow({super.key, required this.accentColor, this.initialDirectory});
 
   @override
   State<TerminalWindow> createState() => _TerminalWindowState();
@@ -35,7 +36,7 @@ class _TerminalWindowState extends State<TerminalWindow> {
   void initState() {
     super.initState();
     _terminalController = TerminalController();
-    _workingDirectory = Platform.environment['HOME'] ?? Directory.current.path;
+    _workingDirectory = widget.initialDirectory ?? Platform.environment['HOME'] ?? Directory.current.path;
     _createNewSession();
   }
 

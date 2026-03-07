@@ -7,9 +7,7 @@ import 'ui/project_manager_dialog.dart';
 import 'ui/flying_window.dart';
 import 'ui/exploding_window.dart';
 import 'core/grid_models.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:math' as math;
-import 'dart:convert';
 import 'core/project_service.dart';
 
 class App extends StatefulWidget {
@@ -586,6 +584,7 @@ class _AppState extends State<App> {
                               onMinimize: () => _minimizeWindow(w, workAreaSize),
                               onDelete: () => _removeWindow(w.id),
                               onFocus: () => _focusWindow(w),
+                              initialDirectory: _activeProject?.directoryPath,
                             );
                         }),
                         // Анимированная панель выбора окон

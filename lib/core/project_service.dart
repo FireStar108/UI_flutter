@@ -132,11 +132,53 @@ class ProjectService {
     await configFile.writeAsString(jsonEncode(project.toJson()));
   }
 
-  /// Удалить проект
+  /// Удалить проект (удаляем только config.json, не папку пользователя)
   Future<void> deleteProject(ProjectModel project) async {
-    final dir = Directory(project.directoryPath);
-    if (await dir.exists()) {
-      await dir.delete(recursive: true);
+    final configFile = File(p.join(project.directoryPath, 'config.json'));
+    if (await configFile.exists()) {
+      await configFile.delete();
     }
+  }
+
+  /// Создать проект в конкретной выбранной пользователем папке
+  Future<ProjectModel> createProjectInDirectory(String name, String dirPath) async {
+    final id = DateTime.now().millisecondsSinceEpoch.toString();
+    final dir = Directory(dirPath);
+    if (!await dir.exists()) {
+      await dir.create(recursive: true);
+    }
+
+    final project = ProjectModel(
+      id: id,
+      name: name,
+      directoryPath: dir.path,
+    );
+
+    await updateProject(project);
+    return project;
+  }
+
+  /// Открыть проект из существующей папки (прочитать config.json если есть, или создать новый)
+  Future<ProjectModel?> openProjectFromDirectory(String dirPath) async {
+    final dir = Directory(dirPath);
+    if (!await dir.exists()) return null;
+
+    final configFile = File(p.join(dir.path, 'config.json'));
+    if (await configFile.exists()) {
+      try {
+        final content = await configFile.readAsString();
+        final json = jsonDecode(content);
+        return ProjectModel.fromJson(json);
+      } catch (e) {
+        print('Error reading config.json in $dirPath: $e');
+      }
+    }
+
+    // Если config.json нет — создаём новый проект в этой папке
+    final folderName = dirPath.split(Platform.pathSeparator).last;
+    return createProjectInDirectory(
+      folderName.length > 20 ? folderName.substring(0, 20) : folderName,
+      dirPath,
+    );
   }
 }

@@ -64,6 +64,7 @@ class WindowItem extends StatelessWidget {
   final Function() onFocus;
   final Function(GridMode mode, GridMetadata? metadata)? onGridModeChanged;
   final Color themeColor;
+  final String? initialDirectory;
 
   const WindowItem({
     super.key,
@@ -79,6 +80,7 @@ class WindowItem extends StatelessWidget {
     required this.onFocus,
     this.onGridModeChanged,
     required this.themeColor,
+    this.initialDirectory,
   });
 
   @override
@@ -168,9 +170,9 @@ class WindowItem extends StatelessWidget {
                       : data.type == 'settings_grid'
                           ? SettingsGrid(onApply: onGridModeChanged)
                           : data.type == 'file_browser'
-                              ? FileBrowser(accentColor: themeColor)
+                              ? FileBrowser(accentColor: themeColor, initialDirectory: initialDirectory)
                               : data.type == 'terminal'
-                                  ? TerminalWindow(accentColor: themeColor)
+                                  ? TerminalWindow(accentColor: themeColor, initialDirectory: initialDirectory)
                                   : const Center(
                               child: Icon(Icons.window, color: Colors.white30, size: 40),
                             ),
