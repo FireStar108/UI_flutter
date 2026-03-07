@@ -176,6 +176,7 @@ class _ProjectManagerDialogState extends State<ProjectManagerDialog> {
                                 const SizedBox(height: 8),
                                 TextField(
                                   controller: _nameController,
+                                  maxLength: 20,
                                   style: const TextStyle(color: Colors.white),
                                   decoration: InputDecoration(
                                     filled: true,

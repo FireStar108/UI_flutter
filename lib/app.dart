@@ -31,6 +31,16 @@ class _AppState extends State<App> {
   Offset? _previewPosition;
   Size? _previewSize;
   String _projectName = 'UI Workspace';
+  final GlobalKey _taskbarKey = GlobalKey();
+
+  Rect _getTaskbarItemRect(int index) {
+    final box = _taskbarKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box != null) {
+      final pos = box.localToGlobal(Offset.zero);
+      return Rect.fromLTWH(pos.dx + index * 150.0, pos.dy - 60.0, 140, 48);
+    }
+    return Rect.fromLTWH(280.0 + index * 150.0, -54.0, 140, 48);
+  }
 
   @override
   void initState() {
@@ -105,14 +115,14 @@ class _AppState extends State<App> {
       Rect startRect;
       if (box != null) {
         final position = box.localToGlobal(Offset.zero);
-        startRect = Rect.fromLTWH(position.dx, position.dy, box.size.width, box.size.height);
+        startRect = Rect.fromLTWH(position.dx, position.dy - 60.0, box.size.width, box.size.height);
       } else {
-        startRect = Rect.fromLTWH(size.width - 200, 10, 48, 48);
+        startRect = Rect.fromLTWH(size.width - 200, -50, 48, 48);
       }
 
       final endRect = Rect.fromLTWH(
         newWindow.relativePosition.dx * areaSize.width,
-        newWindow.relativePosition.dy * areaSize.height + 60.0,
+        newWindow.relativePosition.dy * areaSize.height,
         newWindow.relativeSize.width * areaSize.width,
         newWindow.relativeSize.height * areaSize.height,
       );
@@ -165,7 +175,7 @@ class _AppState extends State<App> {
         final areaSize = Size(size.width, size.height - 60);
         final startRect = Rect.fromLTWH(
           w.relativePosition.dx * areaSize.width,
-          w.relativePosition.dy * areaSize.height + 60.0,
+          w.relativePosition.dy * areaSize.height,
           w.relativeSize.width * areaSize.width,
           w.relativeSize.height * areaSize.height,
         );
@@ -190,7 +200,7 @@ class _AppState extends State<App> {
           final index = _minimizedWindows.indexOf(w);
           w.isClosing = true; // Помечаем, чтобы скрыть из таскбара плавно
 
-          final startRect = Rect.fromLTWH(180.0 + index * 150.0, 6.0, 140, 48);
+          final startRect = _getTaskbarItemRect(index);
 
           final key = GlobalKey();
           _flyingAnimations.add(
@@ -225,15 +235,15 @@ class _AppState extends State<App> {
       _focusWindow(w);
       w.isFlying = true;
 
-      // Начальные координаты относительно экрана (добавляем 60px высоту панели)
+      // Начальные координаты относительно рабочей области (ранее добавлялось 60px, теперь удалено)
       final startRect = Rect.fromLTWH(
         w.relativePosition.dx * areaSize.width,
-        w.relativePosition.dy * areaSize.height + 60.0,
+        w.relativePosition.dy * areaSize.height,
         w.relativeSize.width * areaSize.width,
         w.relativeSize.height * areaSize.height,
       );
-      // Приблизительная позиция в Taskbar в верхней панели
-      final endRect = Rect.fromLTWH(180.0 + _minimizedWindows.length * 150.0, 6.0, 140, 48);
+      // Динамическая позиция в Taskbar в верхней панели
+      final endRect = _getTaskbarItemRect(_minimizedWindows.length);
 
       final key = GlobalKey();
       _flyingAnimations.add(
@@ -265,11 +275,11 @@ class _AppState extends State<App> {
       w.isMinimized = false;
       w.isFlying = true;
 
-      final startRect = Rect.fromLTWH(180.0 + index * 150.0, 6.0, 140, 48);
-      // Конечные координаты (добавляем 60px высоту панели)
+      final startRect = _getTaskbarItemRect(index);
+      // Конечные координаты (без лишних 60px)
       final endRect = Rect.fromLTWH(
         w.relativePosition.dx * areaSize.width,
-        w.relativePosition.dy * areaSize.height + 60.0,
+        w.relativePosition.dy * areaSize.height,
         w.relativeSize.width * areaSize.width,
         w.relativeSize.height * areaSize.height,
       );
@@ -460,6 +470,7 @@ class _AppState extends State<App> {
                     // Панель задач здесь
                     Expanded(
                       child: Taskbar(
+                        key: _taskbarKey,
                         minimizedWindows: _minimizedWindows,
                         onReorder: _onReorderMinimized,
                         onRestore: (w) {
