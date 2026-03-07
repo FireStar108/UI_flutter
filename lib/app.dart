@@ -10,7 +10,7 @@ import 'core/grid_models.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:math' as math;
 import 'dart:convert';
-
+import 'core/project_service.dart';
 
 class App extends StatefulWidget {
   const App({super.key});
@@ -31,52 +31,59 @@ class _AppState extends State<App> {
   Offset? _previewPosition;
   Size? _previewSize;
   String _projectName = 'UI Workspace';
+  ProjectModel? _activeProject;
   final GlobalKey _taskbarKey = GlobalKey();
 
   Rect _getTaskbarItemRect(int index) {
     final box = _taskbarKey.currentContext?.findRenderObject() as RenderBox?;
     if (box != null) {
       final pos = box.localToGlobal(Offset.zero);
-      return Rect.fromLTWH(pos.dx + index * 150.0, pos.dy - 60.0, 140, 48);
+      return Rect.fromLTWH(pos.dx + index * 150.0, pos.dy, 140, 48);
     }
-    return Rect.fromLTWH(280.0 + index * 150.0, -54.0, 140, 48);
+    return Rect.fromLTWH(280.0 + index * 150.0, 6.0, 140, 48);
   }
 
   @override
   void initState() {
     super.initState();
-    _loadGridMode();
+    _initWorkspace();
   }
 
-  Future<void> _loadGridMode() async {
-    final prefs = await SharedPreferences.getInstance();
-    final modeIndex = prefs.getInt('grid_mode') ?? 0;
-    
-    // Загрузка кастомных метаданных из JSON
-    final customMetaJson = prefs.getString('custom_grid_metadata');
-    GridMetadata? customMeta;
-    if (customMetaJson != null) {
-      try {
-        final map = jsonDecode(customMetaJson);
-        customMeta = GridMetadata.fromJson(map);
-      } catch (e) {
-        debugPrint('Error loading grid metadata: $e');
-      }
+  Future<void> _initWorkspace() async {
+    final projs = await ProjectService().loadProjects();
+    ProjectModel? active;
+    if (projs.isEmpty) {
+      active = await ProjectService().createProject('UI Workspace');
+    } else {
+      active = projs.first;
     }
-
+    
     if (mounted) {
       setState(() {
-        _currentGridMode = GridMode.values[modeIndex];
-        _customGridMetadata = customMeta;
+        _activeProject = active;
+        _projectName = active!.name;
+        _currentGridMode = GridMode.fromModeString(active.gridModeId);
+        _customGridMetadata = active.gridData;
+        
+        _windows.clear();
+        _minimizedWindows.clear();
+        for (var w in active.windows) {
+          if (w.isMinimized) {
+            _minimizedWindows.add(w);
+          } else {
+            _windows.add(w);
+          }
+        }
       });
     }
   }
 
-  Future<void> _saveGridMode(GridMode mode, GridMetadata? metadata) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt('grid_mode', mode.index);
-    if (metadata != null) {
-      await prefs.setString('custom_grid_metadata', jsonEncode(metadata.toJson()));
+  void _saveWorkspace() {
+    if (_activeProject != null) {
+      _activeProject!.gridModeId = _currentGridMode.name;
+      _activeProject!.gridData = _customGridMetadata;
+      _activeProject!.windows = [..._windows, ..._minimizedWindows];
+      ProjectService().updateProject(_activeProject!);
     }
   }
 
@@ -115,14 +122,14 @@ class _AppState extends State<App> {
       Rect startRect;
       if (box != null) {
         final position = box.localToGlobal(Offset.zero);
-        startRect = Rect.fromLTWH(position.dx, position.dy - 60.0, box.size.width, box.size.height);
+        startRect = Rect.fromLTWH(position.dx, position.dy, box.size.width, box.size.height);
       } else {
-        startRect = Rect.fromLTWH(size.width - 200, -50, 48, 48);
+        startRect = Rect.fromLTWH(size.width - 200, 10, 48, 48);
       }
 
       final endRect = Rect.fromLTWH(
         newWindow.relativePosition.dx * areaSize.width,
-        newWindow.relativePosition.dy * areaSize.height,
+        newWindow.relativePosition.dy * areaSize.height + 60.0,
         newWindow.relativeSize.width * areaSize.width,
         newWindow.relativeSize.height * areaSize.height,
       );
@@ -143,6 +150,7 @@ class _AppState extends State<App> {
               _flyingAnimations.removeWhere((anim) => anim.key == key);
               newWindow.isFlying = false;
             });
+            _saveWorkspace(); // Сохраняем добавленное окно
           },
         ),
       );
@@ -175,7 +183,7 @@ class _AppState extends State<App> {
         final areaSize = Size(size.width, size.height - 60);
         final startRect = Rect.fromLTWH(
           w.relativePosition.dx * areaSize.width,
-          w.relativePosition.dy * areaSize.height,
+          w.relativePosition.dy * areaSize.height + 60.0,
           w.relativeSize.width * areaSize.width,
           w.relativeSize.height * areaSize.height,
         );
@@ -190,6 +198,7 @@ class _AppState extends State<App> {
               setState(() {
                 _flyingAnimations.removeWhere((anim) => anim.key == key);
               });
+              _saveWorkspace();
             },
           ) as Widget,
         );
@@ -213,6 +222,7 @@ class _AppState extends State<App> {
                   _flyingAnimations.removeWhere((anim) => anim.key == key);
                   _minimizedWindows.remove(w); // Окончательно удаляем после взрыва
                 });
+                _saveWorkspace();
               },
             ) as Widget,
           );
@@ -235,10 +245,10 @@ class _AppState extends State<App> {
       _focusWindow(w);
       w.isFlying = true;
 
-      // Начальные координаты относительно рабочей области (ранее добавлялось 60px, теперь удалено)
+      // Начальные координаты
       final startRect = Rect.fromLTWH(
         w.relativePosition.dx * areaSize.width,
-        w.relativePosition.dy * areaSize.height,
+        w.relativePosition.dy * areaSize.height + 60.0,
         w.relativeSize.width * areaSize.width,
         w.relativeSize.height * areaSize.height,
       );
@@ -261,6 +271,7 @@ class _AppState extends State<App> {
               _windows.remove(w);
               _minimizedWindows.add(w);
             });
+            _saveWorkspace();
           },
         ),
       );
@@ -276,10 +287,10 @@ class _AppState extends State<App> {
       w.isFlying = true;
 
       final startRect = _getTaskbarItemRect(index);
-      // Конечные координаты (без лишних 60px)
+      // Конечные координаты (возвращаем 60px)
       final endRect = Rect.fromLTWH(
         w.relativePosition.dx * areaSize.width,
-        w.relativePosition.dy * areaSize.height,
+        w.relativePosition.dy * areaSize.height + 60.0,
         w.relativeSize.width * areaSize.width,
         w.relativeSize.height * areaSize.height,
       );
@@ -297,6 +308,7 @@ class _AppState extends State<App> {
               _flyingAnimations.removeWhere((anim) => anim.key == key);
               w.isFlying = false;
             });
+            _saveWorkspace();
           },
         ),
       );
@@ -396,6 +408,7 @@ class _AppState extends State<App> {
       _previewPosition = null;
       _previewSize = null;
     });
+    _saveWorkspace();
   }
 
   @override
@@ -441,14 +454,27 @@ class _AppState extends State<App> {
                     Builder(
                       builder: (btnContext) => TextButton.icon(
                         onPressed: () async {
-                          final proj = await showDialog<MockProject>(
+                          final proj = await showDialog<ProjectModel>(
                             context: btnContext,
                             barrierDismissible: true,
                             builder: (context) => const ProjectManagerDialog(),
                           );
                           if (proj != null) {
                             setState(() {
+                              _activeProject = proj;
                               _projectName = proj.name;
+                              _currentGridMode = GridMode.fromModeString(proj.gridModeId);
+                              _customGridMetadata = proj.gridData;
+                              
+                              _windows.clear();
+                              _minimizedWindows.clear();
+                              for (var w in proj.windows) {
+                                if (w.isMinimized) {
+                                  _minimizedWindows.add(w);
+                                } else {
+                                  _windows.add(w);
+                                }
+                              }
                             });
                           }
                         },
@@ -552,7 +578,7 @@ class _AppState extends State<App> {
                                     _currentGridMode = mode;
                                     if (metadata != null) _customGridMetadata = metadata;
                                   });
-                                  _saveGridMode(mode, metadata);
+                                  _saveWorkspace();
                                 },
                               onPanUpdate: (details) => _handlePanUpdate(w, details, workAreaSize),
                               onResizeUpdate: (delta) => _handleResizeUpdate(w, delta, workAreaSize),

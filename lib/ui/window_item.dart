@@ -27,6 +27,28 @@ class WindowData {
     this.isClosing = false,
     this.isFlying = false,
   }) : key = key ?? GlobalKey();
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'type': type,
+        'position_dx': relativePosition.dx,
+        'position_dy': relativePosition.dy,
+        'size_w': relativeSize.width,
+        'size_h': relativeSize.height,
+        'color': color.value,
+        'isMinimized': isMinimized,
+      };
+
+  factory WindowData.fromJson(Map<String, dynamic> json) {
+    return WindowData(
+      id: json['id'] ?? DateTime.now().toString(),
+      type: json['type'] ?? 'Окно',
+      relativePosition: Offset((json['position_dx'] ?? 0.0).toDouble(), (json['position_dy'] ?? 0.0).toDouble()),
+      relativeSize: Size((json['size_w'] ?? 0.3).toDouble(), (json['size_h'] ?? 0.3).toDouble()),
+      color: Color(json['color'] ?? 0xFF212121),
+      isMinimized: json['isMinimized'] ?? false,
+    );
+  }
 }
 
 class WindowItem extends StatelessWidget {

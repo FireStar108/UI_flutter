@@ -1,18 +1,5 @@
 import 'package:flutter/material.dart';
-
-class MockProject {
-  String id;
-  String name;
-  String preset;
-  bool useCuda;
-
-  MockProject({
-    required this.id,
-    required this.name,
-    this.preset = 'default',
-    this.useCuda = false,
-  });
-}
+import '../core/project_service.dart';
 
 class ProjectManagerDialog extends StatefulWidget {
   const ProjectManagerDialog({super.key});
@@ -22,21 +9,27 @@ class ProjectManagerDialog extends StatefulWidget {
 }
 
 class _ProjectManagerDialogState extends State<ProjectManagerDialog> {
-  final List<MockProject> _projects = [
-    MockProject(id: '1', name: 'My First Project', preset: 'default', useCuda: true),
-    MockProject(id: '2', name: 'Test Environment', preset: 'custom', useCuda: false),
-  ];
-
-  MockProject? _selectedProject;
+  List<ProjectModel> _projects = [];
+  bool _isLoading = true;
+  ProjectModel? _selectedProject;
   late TextEditingController _nameController;
 
   @override
   void initState() {
     super.initState();
     _nameController = TextEditingController();
-    if (_projects.isNotEmpty) {
-      _selectProject(_projects.first);
-    }
+    _loadProjects();
+  }
+
+  Future<void> _loadProjects() async {
+    final projs = await ProjectService().loadProjects();
+    setState(() {
+      _projects = projs;
+      _isLoading = false;
+      if (_projects.isNotEmpty) {
+        _selectProject(_projects.first);
+      }
+    });
   }
 
   @override
@@ -45,22 +38,25 @@ class _ProjectManagerDialogState extends State<ProjectManagerDialog> {
     super.dispose();
   }
 
-  void _selectProject(MockProject proj) {
+  void _selectProject(ProjectModel proj) {
     setState(() {
       _selectedProject = proj;
       _nameController.text = proj.name;
     });
   }
 
-  void _createNewProject() {
-    final newProj = MockProject(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      name: 'New Project ${_projects.length + 1}',
-    );
+  Future<void> _createNewProject() async {
+    final newProj = await ProjectService().createProject('New Project ${_projects.length + 1}');
     setState(() {
       _projects.add(newProj);
       _selectProject(newProj);
     });
+  }
+
+  Future<void> _saveCurrentProject() async {
+    if (_selectedProject != null) {
+      await ProjectService().updateProject(_selectedProject!);
+    }
   }
 
   @override
@@ -135,7 +131,9 @@ class _ProjectManagerDialogState extends State<ProjectManagerDialog> {
                           ),
                         ),
                         Expanded(
-                          child: ListView.builder(
+                          child: _isLoading 
+                          ? const Center(child: CircularProgressIndicator())
+                          : ListView.builder(
                             itemCount: _projects.length,
                             itemBuilder: (context, index) {
                               final proj = _projects[index];
@@ -149,6 +147,13 @@ class _ProjectManagerDialogState extends State<ProjectManagerDialog> {
                                     color: isSelected ? Colors.white : Colors.white70,
                                     fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                                   ),
+                                ),
+                                trailing: IconButton(
+                                  icon: const Icon(Icons.delete_outline, color: Colors.white24, size: 18),
+                                  onPressed: () async {
+                                    await ProjectService().deleteProject(proj);
+                                    _loadProjects(); // Перезагружаем список
+                                  },
                                 ),
                                 onTap: () => _selectProject(proj),
                               );
@@ -188,6 +193,7 @@ class _ProjectManagerDialogState extends State<ProjectManagerDialog> {
                                     setState(() {
                                       _selectedProject!.name = val;
                                     });
+                                    _saveCurrentProject();
                                   },
                                 ),
                                 const SizedBox(height: 24),
@@ -214,6 +220,7 @@ class _ProjectManagerDialogState extends State<ProjectManagerDialog> {
                                       onChanged: (val) {
                                         if (val != null) {
                                           setState(() => _selectedProject!.preset = val);
+                                          _saveCurrentProject();
                                         }
                                       },
                                     ),
@@ -230,6 +237,7 @@ class _ProjectManagerDialogState extends State<ProjectManagerDialog> {
                                   value: _selectedProject!.useCuda,
                                   onChanged: (val) {
                                     setState(() => _selectedProject!.useCuda = val ?? false);
+                                    _saveCurrentProject();
                                   },
                                   activeColor: Colors.blueAccent,
                                   checkColor: Colors.white,
@@ -244,8 +252,9 @@ class _ProjectManagerDialogState extends State<ProjectManagerDialog> {
                                   alignment: Alignment.bottomRight,
                                   child: ElevatedButton.icon(
                                     onPressed: () {
-                                      // TODO: Apply the logic to open the selected project globally in the workspace
-                                      Navigator.of(context).pop(_selectedProject);
+                                      _saveCurrentProject().then((_) {
+                                        Navigator.of(context).pop(_selectedProject);
+                                      });
                                     },
                                     icon: const Icon(Icons.check),
                                     label: const Text('СОХРАНИТЬ И ОТКРЫТЬ'),
