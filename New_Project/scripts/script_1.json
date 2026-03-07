@@ -1,1 +1,1 @@
-{"nodes":[{"id":"start_1772906534401","typeId":"start","px":383.43359375,"py":194.91796875}],"connections":[],"offset":{"x":0.0,"y":0.0},"scale":1.0}
+{"nodes":[{"id":"start_1772906701152","typeId":"start","px":24.01171875,"py":136.09375},{"id":"if_cond_1772906704322","typeId":"if_cond","px":350.2109375,"py":252.16015625}],"connections":[{"id":"conn_1772906710945","fromNodeId":"start_1772906701152","fromOutputIndex":0,"toNodeId":"if_cond_1772906704322","toInputIndex":0}],"offset":{"x":106.95961153004123,"y":54.16492436518732},"scale":0.5725163477590751}

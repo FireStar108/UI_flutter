@@ -157,6 +157,8 @@ class _ScriptWindowState extends State<ScriptWindow> {
   static const double kNodeHeight = 80;
   static const double kPinRadius = 7;
 
+  final GlobalKey _canvasKey = GlobalKey();
+
   @override
   void initState() {
     super.initState();
@@ -697,6 +699,7 @@ class _ScriptWindowState extends State<ScriptWindow> {
           _saveCurrentScript();
         },
         child: ClipRect(
+          key: _canvasKey,
           child: Stack(
             children: [
               CustomPaint(
@@ -862,9 +865,13 @@ class _ScriptWindowState extends State<ScriptWindow> {
       feedback: Material(color: Colors.transparent, child: _buildNodePreview(def)),
       childWhenDragging: Opacity(opacity: 0.3, child: _buildShopCard(def)),
       onDragEnd: (details) {
-        final renderBox = context.findRenderObject() as RenderBox;
-        final localPos = renderBox.globalToLocal(details.offset);
-        _addNodeToCanvas(def, localPos);
+        final renderBox = _canvasKey.currentContext?.findRenderObject() as RenderBox?;
+        if (renderBox != null) {
+          final localPos = renderBox.globalToLocal(details.offset);
+          // Учитываем размер ноды, чтобы дропать "за центр" или хотя бы ближе к курсору
+          // (details.offset - это верхний левый угол фидбека)
+          _addNodeToCanvas(def, localPos);
+        }
       },
       child: _buildShopCard(def),
     );
