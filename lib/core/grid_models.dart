@@ -67,6 +67,22 @@ class GridLine {
       crossEnd: end,
     );
   }
+
+  GridLine copyWith({
+    String? id,
+    bool? isVertical,
+    double? position,
+    double? crossStart,
+    double? crossEnd,
+  }) {
+    return GridLine(
+      id: id ?? this.id,
+      isVertical: isVertical ?? this.isVertical,
+      position: position ?? this.position,
+      crossStart: crossStart ?? this.crossStart,
+      crossEnd: crossEnd ?? this.crossEnd,
+    );
+  }
 }
 
 class GridCell {
@@ -109,7 +125,7 @@ class GridMetadata {
     return GridMetadata(
       id: id ?? this.id,
       name: name ?? this.name,
-      lines: lines ?? List.from(this.lines),
+      lines: lines ?? this.lines.map((l) => l.copyWith()).toList(),
       colorValue: colorValue ?? this.colorValue,
       icon: icon ?? this.icon,
     );

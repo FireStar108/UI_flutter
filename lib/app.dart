@@ -396,16 +396,20 @@ class _AppState extends State<App> {
         scaffoldBackgroundColor: Colors.black,
         useMaterial3: true,
       ),
-      home: KeyboardListener(
-        focusNode: FocusNode()..requestFocus(),
-        onKeyEvent: (event) {
-          setState(() {
-            _isShiftPressed = HardwareKeyboard.instance.isShiftPressed;
-            if (!_isShiftPressed) {
-              _previewPosition = null;
-              _previewSize = null;
-            }
-          });
+      home: Focus(
+        autofocus: true,
+        onKeyEvent: (node, event) {
+          final isShift = HardwareKeyboard.instance.isShiftPressed;
+          if (_isShiftPressed != isShift) {
+            setState(() {
+              _isShiftPressed = isShift;
+              if (!_isShiftPressed) {
+                _previewPosition = null;
+                _previewSize = null;
+              }
+            });
+          }
+          return KeyEventResult.ignored; // Позволяем событиям идти дальше
         },
         child: Scaffold(
           body: Stack(

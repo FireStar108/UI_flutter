@@ -195,7 +195,7 @@ class _SettingsGridState extends State<SettingsGrid> {
         final size = Size(constraints.maxWidth, constraints.maxHeight);
 
         return GestureDetector(
-          behavior: HitTestBehavior.opaque,
+          behavior: HitTestBehavior.translucent,
           onDoubleTapDown: (details) {
             if (!_isEditing) return;
             _showContextMenu(context, details.localPosition, size);
@@ -685,14 +685,15 @@ class _SettingsGridState extends State<SettingsGrid> {
               },
             ),
             const SizedBox(width: 16),
-             _buildButton(
+            _buildButton(
               label: 'ПРИМЕНИТЬ',
               icon: Icons.check_circle_outline_rounded,
               color: Colors.orangeAccent,
               textColor: Colors.black,
               onPressed: () {
                 if (widget.onApply != null) {
-                  widget.onApply!(GridMode.custom, _selectedTemplate ?? _customMetadata);
+                  // Передаем либо измененный _customMetadata (если он есть), либо шаблон
+                  widget.onApply!(GridMode.custom, _customMetadata);
                 }
               },
             ),
