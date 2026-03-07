@@ -557,6 +557,13 @@ class _AppState extends State<App> {
                                     color: Colors.greenAccent,
                                     onTap: (ctx) => _addWindow('file_browser', ctx),
                                   ),
+                                  const SizedBox(width: 12),
+                                  _buildTypeOption(
+                                    icon: Icons.terminal_rounded,
+                                    label: 'terminal',
+                                    color: Colors.purpleAccent,
+                                    onTap: (ctx) => _addWindow('terminal', ctx),
+                                  ),
                                 ],
                               ),
                             ),

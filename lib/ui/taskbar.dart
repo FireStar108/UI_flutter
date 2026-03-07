@@ -76,7 +76,9 @@ class Taskbar extends StatelessWidget {
                                   ? Icons.grid_4x4_rounded
                                   : w.type == 'file_browser'
                                       ? Icons.folder_open_rounded
-                                      : Icons.window,
+                                      : w.type == 'terminal'
+                                          ? Icons.terminal_rounded
+                                          : Icons.window,
                           size: 16,
                           color: w.color,
                         ),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'viewport_cam.dart';
+import 'terminal_window.dart';
 import 'settings_grid.dart';
 import 'file_browser.dart';
 import '../core/grid_models.dart';
@@ -146,7 +147,9 @@ class WindowItem extends StatelessWidget {
                           ? SettingsGrid(onApply: onGridModeChanged)
                           : data.type == 'file_browser'
                               ? FileBrowser(accentColor: themeColor)
-                              : const Center(
+                              : data.type == 'terminal'
+                                  ? TerminalWindow(accentColor: themeColor)
+                                  : const Center(
                               child: Icon(Icons.window, color: Colors.white30, size: 40),
                             ),
                 ),
