@@ -158,7 +158,7 @@ class _ScriptWindowState extends State<ScriptWindow> {
   static const double kPinRadius = 7;
 
   final GlobalKey _canvasKey = GlobalKey();
-  double _leftPanelWidth = 180.0;
+  double _leftPanelWidth = 200.0;
   double _rightPanelWidth = 220.0;
 
   @override
@@ -455,7 +455,7 @@ class _ScriptWindowState extends State<ScriptWindow> {
             GestureDetector(
               onHorizontalDragUpdate: (details) {
                 setState(() {
-                  _leftPanelWidth = (_leftPanelWidth + details.delta.dx).clamp(120.0, 350.0);
+                  _leftPanelWidth = (_leftPanelWidth + details.delta.dx).clamp(200.0, 350.0);
                 });
               },
               child: MouseRegion(
@@ -472,7 +472,7 @@ class _ScriptWindowState extends State<ScriptWindow> {
             GestureDetector(
               onHorizontalDragUpdate: (details) {
                 setState(() {
-                  _rightPanelWidth = (_rightPanelWidth - details.delta.dx).clamp(150.0, 400.0);
+                  _rightPanelWidth = (_rightPanelWidth - details.delta.dx).clamp(200.0, 400.0);
                 });
               },
               child: MouseRegion(

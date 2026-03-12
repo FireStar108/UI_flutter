@@ -209,7 +209,7 @@ class _FileBrowserState extends State<FileBrowser> {
                 GestureDetector(
                   onHorizontalDragUpdate: (details) {
                     setState(() {
-                      _sidebarWidth = (_sidebarWidth + details.delta.dx).clamp(100.0, 400.0);
+                      _sidebarWidth = (_sidebarWidth + details.delta.dx).clamp(200.0, 400.0);
                     });
                   },
                   child: MouseRegion(
