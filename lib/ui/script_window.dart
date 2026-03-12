@@ -158,6 +158,8 @@ class _ScriptWindowState extends State<ScriptWindow> {
   static const double kPinRadius = 7;
 
   final GlobalKey _canvasKey = GlobalKey();
+  double _leftPanelWidth = 180.0;
+  double _rightPanelWidth = 220.0;
 
   @override
   void initState() {
@@ -449,11 +451,35 @@ class _ScriptWindowState extends State<ScriptWindow> {
       child: Row(
         children: [
           if (_isLeftPanelOpen) _buildLeftPanel(),
+          if (_isLeftPanelOpen)
+            GestureDetector(
+              onHorizontalDragUpdate: (details) {
+                setState(() {
+                  _leftPanelWidth = (_leftPanelWidth + details.delta.dx).clamp(120.0, 350.0);
+                });
+              },
+              child: MouseRegion(
+                cursor: SystemMouseCursors.resizeLeftRight,
+                child: Container(width: 4, color: Colors.transparent),
+              ),
+            ),
           Expanded(
             child: _activeScript == null
                 ? _buildEmptyCanvas()
                 : _buildCanvas(),
           ),
+          if (_activeScript != null && (_isShopOpen || _selectedNodeId != null))
+            GestureDetector(
+              onHorizontalDragUpdate: (details) {
+                setState(() {
+                  _rightPanelWidth = (_rightPanelWidth - details.delta.dx).clamp(150.0, 400.0);
+                });
+              },
+              child: MouseRegion(
+                cursor: SystemMouseCursors.resizeLeftRight,
+                child: Container(width: 4, color: Colors.transparent),
+              ),
+            ),
           if (_activeScript != null && (_isShopOpen || _selectedNodeId != null))
             _buildRightPanel(),
         ],
@@ -469,7 +495,7 @@ class _ScriptWindowState extends State<ScriptWindow> {
   Widget _buildSettingsPanel() {
     final node = _nodes.firstWhere((n) => n.id == _selectedNodeId, orElse: () => _nodes.first);
     return Container(
-      width: 220,
+      width: _rightPanelWidth,
       decoration: const BoxDecoration(color: Color(0xff141414), border: Border(left: BorderSide(color: Colors.white10))),
       child: Column(
         children: [
@@ -516,7 +542,7 @@ class _ScriptWindowState extends State<ScriptWindow> {
 
   Widget _buildLeftPanel() {
     return Container(
-      width: 180,
+      width: _leftPanelWidth,
       decoration: const BoxDecoration(
         color: Color(0xff141414),
         border: Border(right: BorderSide(color: Colors.white10)),
@@ -854,7 +880,7 @@ class _ScriptWindowState extends State<ScriptWindow> {
     final Map<String, List<BlockDefinition>> grouped = {};
     for (final b in filtered) { grouped.putIfAbsent(b.category, () => []).add(b); }
     return Container(
-      width: 220,
+      width: _rightPanelWidth,
       decoration: const BoxDecoration(color: Color(0xff141414), border: Border(left: BorderSide(color: Colors.white10))),
       child: Column(
         children: [

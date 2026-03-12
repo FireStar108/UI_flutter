@@ -32,6 +32,8 @@ class _TerminalWindowState extends State<TerminalWindow> {
 
   late final TerminalController _terminalController;
 
+  double _sidebarWidth = 240.0;
+
   @override
   void initState() {
     super.initState();
@@ -172,120 +174,139 @@ class _TerminalWindowState extends State<TerminalWindow> {
       child: Row(
         children: [
           // Sidebar
-          Container(
-            width: 240,
-            decoration: BoxDecoration(
-              color: Colors.grey[900],
-              border: Border(right: BorderSide(color: Colors.white.withValues(alpha: 0.1))),
-            ),
-            child: Column(
-              children: [
-                // Toolbar
-                Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Row(
-                    children: [
-                      /* Open Directory */
-                      IconButton(
-                        onPressed: _pickDirectory,
-                        icon: const Icon(Icons.folder_open_rounded, color: Colors.white54, size: 20),
-                        tooltip: 'Выбрать папку',
-                        hoverColor: Colors.white10,
-                        splashRadius: 20,
-                      ),
-                      const Spacer(),
-                      /* New Terminal */
-                      IconButton(
-                        onPressed: _showNewTerminalDialog,
-                        icon: Icon(Icons.add_rounded, color: widget.accentColor, size: 24),
-                        tooltip: 'Новый терминал',
-                        hoverColor: Colors.white10,
-                        splashRadius: 20,
-                      ),
-                    ],
-                  ),
-                ),
-                if (_workingDirectory != null)
+          SizedBox(
+            width: _sidebarWidth,
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.grey[900],
+                border: Border(right: BorderSide(color: Colors.white.withValues(alpha: 0.1))),
+              ),
+              child: Column(
+                children: [
+                  // Toolbar
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        _workingDirectory!,
-                        style: const TextStyle(color: Colors.white38, fontSize: 10, overflow: TextOverflow.ellipsis),
-                        maxLines: 1,
-                      ),
+                    padding: const EdgeInsets.all(12),
+                    child: Row(
+                      children: [
+                        /* Open Directory */
+                        IconButton(
+                          onPressed: _pickDirectory,
+                          icon: const Icon(Icons.folder_open_rounded, color: Colors.white54, size: 20),
+                          tooltip: 'Выбрать папку',
+                          hoverColor: Colors.white10,
+                          splashRadius: 20,
+                        ),
+                        const Spacer(),
+                        /* New Terminal */
+                        IconButton(
+                          onPressed: _showNewTerminalDialog,
+                          icon: Icon(Icons.add_rounded, color: widget.accentColor, size: 24),
+                          tooltip: 'Новый терминал',
+                          hoverColor: Colors.white10,
+                          splashRadius: 20,
+                        ),
+                      ],
                     ),
                   ),
-                const Divider(color: Colors.white10, height: 1),
-                // Session List
-                Expanded(
-                  child: ListView.builder(
-                    itemCount: _sessions.length,
-                    itemBuilder: (context, index) {
-                      final session = _sessions[index];
-                      final isActive = _activeSessionId == session.id;
+                  if (_workingDirectory != null)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          _workingDirectory!,
+                          style: const TextStyle(color: Colors.white38, fontSize: 10, overflow: TextOverflow.ellipsis),
+                          maxLines: 1,
+                        ),
+                      ),
+                    ),
+                  const Divider(color: Colors.white10, height: 1),
+                  // Session List
+                  Expanded(
+                    child: ListView.builder(
+                      itemCount: _sessions.length,
+                      itemBuilder: (context, index) {
+                        final session = _sessions[index];
+                        final isActive = _activeSessionId == session.id;
 
-                      return InkWell(
-                        onTap: () {
-                          setState(() {
-                            _activeSessionId = session.id;
-                          });
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                          decoration: BoxDecoration(
-                            color: isActive ? Colors.white.withValues(alpha: 0.05) : Colors.transparent,
-                            border: Border(
-                              left: BorderSide(
-                                color: isActive ? widget.accentColor : Colors.transparent,
-                                width: 3,
+                        return InkWell(
+                          onTap: () {
+                            setState(() {
+                              _activeSessionId = session.id;
+                            });
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            decoration: BoxDecoration(
+                              color: isActive ? Colors.white.withValues(alpha: 0.05) : Colors.transparent,
+                              border: Border(
+                                left: BorderSide(
+                                  color: isActive ? widget.accentColor : Colors.transparent,
+                                  width: 3,
+                                ),
                               ),
                             ),
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(Icons.terminal_rounded, size: 16, color: isActive ? widget.accentColor : Colors.white54),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  session.name,
-                                  style: TextStyle(
-                                    color: isActive ? Colors.white : Colors.white60,
-                                    fontSize: 12,
-                                    fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+                            child: Row(
+                              children: [
+                                Icon(Icons.terminal_rounded, size: 16, color: isActive ? widget.accentColor : Colors.white54),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    session.name,
+                                    style: TextStyle(
+                                      color: isActive ? Colors.white : Colors.white60,
+                                      fontSize: 12,
+                                      fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+                                    ),
                                   ),
                                 ),
-                              ),
-                              if (isActive)
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    GestureDetector(
-                                      onTap: () {
-                                        session.terminal.eraseDisplay();
-                                        session.terminal.setCursor(0, 0);
-                                      },
-                                      child: const Icon(Icons.clear_all_rounded, color: Colors.white54, size: 16),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    GestureDetector(
-                                      onTap: () => _deleteSession(session.id),
-                                      child: const Icon(Icons.close_rounded, color: Colors.white54, size: 16),
-                                    ),
-                                  ],
-                                ),
-                            ],
+                                if (isActive)
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      GestureDetector(
+                                        onTap: () {
+                                          session.terminal.eraseDisplay();
+                                          session.terminal.setCursor(0, 0);
+                                        },
+                                        child: const Icon(Icons.clear_all_rounded, color: Colors.white54, size: 16),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      GestureDetector(
+                                        onTap: () => _deleteSession(session.id),
+                                        child: const Icon(Icons.close_rounded, color: Colors.white54, size: 16),
+                                      ),
+                                    ],
+                                  ),
+                              ],
+                            ),
                           ),
-                        ),
-                      );
-                    },
+                        );
+                      },
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
           
+          // Resizer
+          GestureDetector(
+            onHorizontalDragUpdate: (details) {
+              setState(() {
+                _sidebarWidth = (_sidebarWidth + details.delta.dx).clamp(150.0, 400.0);
+              });
+            },
+            child: MouseRegion(
+              cursor: SystemMouseCursors.resizeLeftRight,
+              child: Container(
+                width: 4,
+                color: Colors.transparent,
+                height: double.infinity,
+              ),
+            ),
+          ),
+
           // Terminal View Area
           Expanded(
             child: _sessions.isEmpty

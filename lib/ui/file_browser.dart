@@ -20,12 +20,30 @@ class _FileBrowserState extends State<FileBrowser> {
   FileViewMode _viewMode = FileViewMode.list;
   bool _isLoading = false;
 
+  double _sidebarWidth = 200.0;
+  List<FileSystemEntity> _sidebarFolders = [];
+
   @override
   void initState() {
     super.initState();
     if (widget.initialDirectory != null) {
       _currentPath = widget.initialDirectory;
       _refresh();
+      _loadSidebar();
+    }
+  }
+
+  Future<void> _loadSidebar() async {
+    if (_currentPath == null) return;
+    try {
+      // For simplicity, we show folders in the parent directory or the current project root
+      final projectDir = widget.initialDirectory != null ? Directory(widget.initialDirectory!) : Directory.current;
+      final list = await projectDir.list().where((e) => e is Directory).toList();
+      setState(() {
+        _sidebarFolders = list;
+      });
+    } catch (e) {
+      debugPrint('Error loading sidebar: $e');
     }
   }
 
@@ -36,6 +54,7 @@ class _FileBrowserState extends State<FileBrowser> {
         _currentPath = selectedDirectory;
       });
       _refresh();
+      _loadSidebar();
     }
   }
 
@@ -121,13 +140,97 @@ class _FileBrowserState extends State<FileBrowser> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        _buildToolbar(),
-        Expanded(
-          child: _currentPath == null ? _buildEmptyState() : _buildFileContent(),
-        ),
-      ],
+    return Container(
+      color: const Color(0xff141414),
+      child: Column(
+        children: [
+          _buildToolbar(),
+          Expanded(
+            child: Row(
+              children: [
+                // Sidebar
+                SizedBox(
+                  width: _sidebarWidth,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.black26,
+                      border: Border(right: BorderSide(color: Colors.white.withValues(alpha: 0.05))),
+                    ),
+                    child: Column(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          alignment: Alignment.centerLeft,
+                          child: const Text('FOLDERS', style: TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                        ),
+                        Expanded(
+                          child: ListView.builder(
+                            itemCount: _sidebarFolders.length,
+                            itemBuilder: (context, index) {
+                              final folder = _sidebarFolders[index];
+                              final name = p.basename(folder.path);
+                              final isActive = _currentPath == folder.path;
+                              return InkWell(
+                                onTap: () {
+                                  setState(() => _currentPath = folder.path);
+                                  _refresh();
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                  color: isActive ? widget.accentColor.withValues(alpha: 0.1) : Colors.transparent,
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.folder_rounded, size: 16, color: isActive ? widget.accentColor : Colors.white38),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          name,
+                                          style: TextStyle(
+                                            color: isActive ? Colors.white : Colors.white60,
+                                            fontSize: 12,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                // Resizer
+                GestureDetector(
+                  onHorizontalDragUpdate: (details) {
+                    setState(() {
+                      _sidebarWidth = (_sidebarWidth + details.delta.dx).clamp(100.0, 400.0);
+                    });
+                  },
+                  child: MouseRegion(
+                    cursor: SystemMouseCursors.resizeLeftRight,
+                    child: Container(
+                      width: 4,
+                      color: Colors.transparent,
+                      height: double.infinity,
+                    ),
+                  ),
+                ),
+
+                // Content
+                Expanded(
+                  child: _currentPath == null ? _buildEmptyState() : _buildFileContent(),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
