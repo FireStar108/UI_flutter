@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:path/path.dart' as p;
+import '../backend/camera_service.dart';
 
 // ============================================================
 // Модели данных
@@ -33,18 +34,21 @@ class ScriptNode {
   final String id;
   final BlockDefinition definition;
   Offset position;
+  Map<String, dynamic> properties;
 
   ScriptNode({
     required this.id,
     required this.definition,
     required this.position,
-  });
+    Map<String, dynamic>? properties,
+  }) : properties = properties ?? {};
 
   Map<String, dynamic> toJson() => {
         'id': id,
         'typeId': definition.id,
         'px': position.dx,
         'py': position.dy,
+        'properties': properties,
       };
 
   factory ScriptNode.fromMap(Map<String, dynamic> map, List<BlockDefinition> catalog) {
@@ -55,6 +59,9 @@ class ScriptNode {
       id: map['id'],
       definition: def,
       position: Offset(map['px'], map['py']),
+      properties: map['properties'] != null 
+          ? Map<String, dynamic>.from(map['properties']) 
+          : {},
     );
   }
 }
@@ -112,6 +119,8 @@ const List<BlockDefinition> kBlockCatalog = [
   BlockDefinition(id: 'http_req', name: 'HTTP Request', category: 'Network', color: Color(0xFF3F51B5), icon: Icons.http, inputs: 1, outputs: 1),
   BlockDefinition(id: 'file_read', name: 'File Read', category: 'IO', color: Color(0xFF795548), icon: Icons.file_open, inputs: 1, outputs: 1),
   BlockDefinition(id: 'string_concat', name: 'String Join', category: 'Data', color: Color(0xFF00ACC1), icon: Icons.text_fields, inputs: 2, outputs: 1),
+  // Hardware
+  BlockDefinition(id: 'cam', name: 'Cam', category: 'Hardware', color: Color(0xFF8BC34A), icon: Icons.videocam, inputs: 0, outputs: 1),
 ];
 
 // ============================================================
@@ -161,16 +170,31 @@ class _ScriptWindowState extends State<ScriptWindow> {
   double _leftPanelWidth = 200.0;
   double _rightPanelWidth = 220.0;
 
+  // Камеры
+  List<CameraInfo> _availableCameras = [];
+  bool _camerasLoaded = false;
+
   @override
   void initState() {
     super.initState();
     _loadScripts();
+    _loadCameras();
   }
 
   @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadCameras() async {
+    final cameras = await CameraService().loadCameras();
+    if (mounted) {
+      setState(() {
+        _availableCameras = cameras;
+        _camerasLoaded = true;
+      });
+    }
   }
 
   String get _scriptsDir {
@@ -518,8 +542,9 @@ class _ScriptWindowState extends State<ScriptWindow> {
                 Text(node.definition.name, style: TextStyle(color: node.definition.color, fontSize: 16, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
                 Text('ID: ${node.id}', style: const TextStyle(color: Colors.white24, fontSize: 10)),
-                const SizedBox(height: 24),
-                const Center(child: Text('Меню настроек пусто', style: TextStyle(color: Colors.white38, fontSize: 12))),
+                const SizedBox(height: 16),
+                // === Специфические настройки блока ===
+                ..._buildBlockSpecificSettings(node),
                 const SizedBox(height: 32),
                 ElevatedButton.icon(
                   onPressed: () => _removeNode(_selectedNodeId!),
@@ -538,6 +563,129 @@ class _ScriptWindowState extends State<ScriptWindow> {
         ],
       ),
     );
+  }
+
+  /// Построение специфических настроек в зависимости от типа блока
+  List<Widget> _buildBlockSpecificSettings(ScriptNode node) {
+    switch (node.definition.id) {
+      case 'cam':
+        return _buildCamSettings(node);
+      default:
+        return [
+          const Center(child: Text('Нет дополнительных настроек', style: TextStyle(color: Colors.white24, fontSize: 12))),
+        ];
+    }
+  }
+
+  /// Настройки блока Cam — выбор камеры
+  List<Widget> _buildCamSettings(ScriptNode node) {
+    final selectedCameraId = node.properties['cameraId'] as String?;
+
+    return [
+      const Text('Камера', style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.bold)),
+      const SizedBox(height: 8),
+      if (!_camerasLoaded)
+        const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)))
+      else
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: Colors.black26,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.white10),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: selectedCameraId != null &&
+                      _availableCameras.any((c) => c.deviceId == selectedCameraId)
+                  ? selectedCameraId
+                  : null,
+              isExpanded: true,
+              dropdownColor: const Color(0xff2d2d2d),
+              style: const TextStyle(color: Colors.white, fontSize: 13),
+              hint: const Text('Выберите камеру', style: TextStyle(color: Colors.white38, fontSize: 12)),
+              items: _availableCameras.map((cam) {
+                return DropdownMenuItem<String>(
+                  value: cam.deviceId,
+                  child: Row(
+                    children: [
+                      Icon(Icons.videocam, size: 14, color: cam.deviceId == selectedCameraId ? const Color(0xFF8BC34A) : Colors.white38),
+                      const SizedBox(width: 8),
+                      Expanded(child: Text(cam.name, overflow: TextOverflow.ellipsis)),
+                    ],
+                  ),
+                );
+              }).toList(),
+              onChanged: (value) {
+                if (value != null) {
+                  setState(() {
+                    node.properties['cameraId'] = value;
+                    final match = _availableCameras.where((c) => c.deviceId == value);
+                    if (match.isNotEmpty) {
+                      node.properties['cameraName'] = match.first.name;
+                    }
+                  });
+                  _saveCurrentScript();
+                }
+              },
+            ),
+          ),
+        ),
+      const SizedBox(height: 12),
+      // Кнопка обновить камеры
+      InkWell(
+        onTap: () async {
+          setState(() => _camerasLoaded = false);
+          final cameras = await CameraService().refreshCameras();
+          if (mounted) {
+            setState(() {
+              _availableCameras = cameras;
+              _camerasLoaded = true;
+            });
+          }
+        },
+        borderRadius: BorderRadius.circular(6),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.05),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: Colors.white10),
+          ),
+          child: const Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.refresh, size: 14, color: Colors.white38),
+              SizedBox(width: 6),
+              Text('Обновить список камер', style: TextStyle(color: Colors.white38, fontSize: 11)),
+            ],
+          ),
+        ),
+      ),
+      const SizedBox(height: 12),
+      // Показ выбранной камеры
+      if (selectedCameraId != null)
+        Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: const Color(0xFF8BC34A).withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: const Color(0xFF8BC34A).withValues(alpha: 0.3)),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.check_circle, size: 14, color: Color(0xFF8BC34A)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  node.properties['cameraName'] ?? selectedCameraId,
+                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                ),
+              ),
+            ],
+          ),
+        ),
+    ];
   }
 
   Widget _buildLeftPanel() {
