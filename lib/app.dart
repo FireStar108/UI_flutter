@@ -459,7 +459,7 @@ class _AppState extends State<App> {
                           final proj = await showDialog<ProjectModel>(
                             context: btnContext,
                             barrierDismissible: true,
-                            builder: (context) => const ProjectManagerDialog(),
+                            builder: (context) => ProjectManagerDialog(currentProject: _activeProject),
                           );
                           if (proj != null) {
                             setState(() {

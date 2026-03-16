@@ -4,7 +4,8 @@ import 'package:file_picker/file_picker.dart';
 import '../core/project_service.dart';
 
 class ProjectManagerDialog extends StatefulWidget {
-  const ProjectManagerDialog({super.key});
+  final ProjectModel? currentProject;
+  const ProjectManagerDialog({super.key, this.currentProject});
 
   @override
   State<ProjectManagerDialog> createState() => _ProjectManagerDialogState();
@@ -30,7 +31,17 @@ class _ProjectManagerDialogState extends State<ProjectManagerDialog> {
       _projects = projs;
       _isLoading = false;
       if (_projects.isNotEmpty && _selectedProject == null) {
-        _selectProject(_projects.first);
+        // Try to find and select the current project
+        if (widget.currentProject != null) {
+          final match = _projects.where((p) => p.directoryPath == widget.currentProject!.directoryPath).firstOrNull;
+          if (match != null) {
+            _selectProject(match);
+          } else {
+            _selectProject(_projects.first);
+          }
+        } else {
+          _selectProject(_projects.first);
+        }
       }
     });
   }
