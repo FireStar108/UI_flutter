@@ -225,7 +225,7 @@ class _ProjectManagerDialogState extends State<ProjectManagerDialog> {
                             itemCount: _projects.length,
                             itemBuilder: (context, index) {
                               final proj = _projects[index];
-                              final isSelected = _selectedProject?.id == proj.id;
+                              final isSelected = _selectedProject?.directoryPath == proj.directoryPath;
                               return ListTile(
                                 tileColor: isSelected ? Colors.white.withValues(alpha: 0.05) : Colors.transparent,
                                 leading: Icon(Icons.folder, color: isSelected ? Colors.blueAccent : Colors.white54),
@@ -245,7 +245,7 @@ class _ProjectManagerDialogState extends State<ProjectManagerDialog> {
                                   icon: const Icon(Icons.delete_outline, color: Colors.white24, size: 18),
                                   onPressed: () async {
                                     await ProjectService().deleteProject(proj);
-                                    if (_selectedProject?.id == proj.id) {
+                                    if (_selectedProject?.directoryPath == proj.directoryPath) {
                                       _selectedProject = null;
                                     }
                                     _loadProjects();
