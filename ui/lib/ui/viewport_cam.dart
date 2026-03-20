@@ -76,6 +76,9 @@ class _ViewportCamState extends State<ViewportCam> {
                           ValueListenableBuilder<List<FaceDetection>>(
                             valueListenable: VisionService().detectionsNotifier,
                             builder: (context, detections, _) {
+                              if (detections.isNotEmpty) {
+                                debugPrint('VIEWPORT: Received ${detections.length} detections');
+                              }
                               return Stack(
                                 children: detections.map((d) => _buildDetectionBox(d, constraints.biggest)).toList(),
                               );

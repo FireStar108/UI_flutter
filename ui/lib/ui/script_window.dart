@@ -602,13 +602,17 @@ class _ScriptWindowState extends State<ScriptWindow> {
   }
 
   void _runSimulation() async {
+    debugPrint('SCRIPT: Simulation started. _isRunning: $_isRunning');
     while (_isRunning) {
       await Future.delayed(const Duration(milliseconds: 500));
       if (!_isRunning) break;
       if (mounted) {
-        VisionService().detectionsNotifier.value = VisionService().generateMockDetections();
+        final detections = VisionService().generateMockDetections();
+        debugPrint('SCRIPT: Updating detections (count: ${detections.length})');
+        VisionService().detectionsNotifier.value = detections;
       }
     }
+    debugPrint('SCRIPT: Simulation stopped.');
   }
 
   Widget _buildRightPanel() {

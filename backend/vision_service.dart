@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 /// Данные о распознанном лице
@@ -105,15 +106,16 @@ class VisionService {
     // Если база пуста, показываем "Unknown" для теста
     final String name = _faceDb.isEmpty ? "Unknown" : _faceDb.first.name;
     
-    // Добавляем немного "дрожания" для реалистичности
-    final double jitterX = (DateTime.now().millisecondsSinceEpoch % 10) - 5;
-    final double jitterY = (DateTime.now().millisecondsSinceEpoch % 8) - 4;
+    // Используем время для более размашистого движения
+    final double time = DateTime.now().millisecondsSinceEpoch / 1000.0;
+    final double offsetX = 50 * math.sin(time);
+    final double offsetY = 30 * math.cos(time * 1.5);
 
     return [
       FaceDetection(
-        boundingBox: Rect.fromLTWH(120 + jitterX, 80 + jitterY, 130, 130),
+        boundingBox: Rect.fromLTWH(100 + offsetX, 80 + offsetY, 150, 150),
         name: name,
-        confidence: 0.85 + (jitterX.abs() / 100),
+        confidence: 0.85 + (0.1 * math.sin(time * 2).abs()),
       )
     ];
   }
