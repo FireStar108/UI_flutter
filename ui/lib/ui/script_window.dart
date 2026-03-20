@@ -179,8 +179,6 @@ class _ScriptWindowState extends State<ScriptWindow> {
 
   // Script Runtime
   bool _isRunning = false;
-  List<FaceDetection> _activeDetections = [];
-  math.Random _random = math.Random();
 
   @override
   void initState() {
@@ -500,15 +498,9 @@ class _ScriptWindowState extends State<ScriptWindow> {
                     ),
                   ),
                 Expanded(
-                  child: Stack(
-                    children: [
-                      _activeScript == null
-                          ? _buildEmptyCanvas()
-                          : _buildCanvas(),
-                      // Viewport Overlay
-                      if (_isRunning) _buildViewportOverlay(),
-                    ],
-                  ),
+                  child: _activeScript == null
+                      ? _buildEmptyCanvas()
+                      : _buildCanvas(),
                 ),
                 if (_activeScript != null && (_isShopOpen || _selectedNodeId != null))
                   GestureDetector(
@@ -605,8 +597,8 @@ class _ScriptWindowState extends State<ScriptWindow> {
   void _stopScript() {
     setState(() {
       _isRunning = false;
-      _activeDetections = [];
     });
+    VisionService().detectionsNotifier.value = [];
   }
 
   void _runSimulation() async {
@@ -614,75 +606,9 @@ class _ScriptWindowState extends State<ScriptWindow> {
       await Future.delayed(const Duration(milliseconds: 500));
       if (!_isRunning) break;
       if (mounted) {
-        setState(() {
-          _activeDetections = VisionService().generateMockDetections();
-        });
+        VisionService().detectionsNotifier.value = VisionService().generateMockDetections();
       }
     }
-  }
-
-  Widget _buildViewportOverlay() {
-    return Positioned(
-      bottom: 20,
-      right: 20,
-      child: Container(
-        width: 320,
-        height: 240,
-        decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.8),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFF03A9F4).withValues(alpha: 0.5), width: 2),
-          boxShadow: [
-            BoxShadow(color: Colors.black54, blurRadius: 10, spreadRadius: 2),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(10),
-          child: Stack(
-            children: [
-              // Фон (симуляция камеры)
-              Container(color: Colors.grey[900]),
-              const Center(child: Icon(Icons.videocam_off, color: Colors.white10, size: 48)),
-              if (_activeDetections.isEmpty)
-                const Positioned(
-                  top: 10,
-                  left: 10,
-                  child: Text('SCANNING...', style: TextStyle(color: Color(0xFF03A9F4), fontSize: 10, fontWeight: FontWeight.bold)),
-                ),
-              // Отрисовка рамок лиц
-              ..._activeDetections.map((d) => _buildDetectionBox(d)),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDetectionBox(FaceDetection detection) {
-    return Positioned(
-      left: detection.boundingBox.left,
-      top: detection.boundingBox.top,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: detection.boundingBox.width,
-            height: detection.boundingBox.height,
-            decoration: BoxDecoration(
-              border: Border.all(color: const Color(0xFF03A9F4), width: 2),
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-            color: const Color(0xFF03A9F4),
-            child: Text(
-              '${detection.name ?? "Unknown"} ${(detection.confidence * 100).round()}%',
-              style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   Widget _buildRightPanel() {

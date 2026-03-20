@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:camera_macos/camera_macos.dart';
+import '../../backend/vision_service.dart';
 
 class ViewportCam extends StatefulWidget {
   const ViewportCam({super.key});
@@ -60,14 +61,27 @@ class _ViewportCamState extends State<ViewportCam> {
             child: _isInitialized && _selectedCamera != null
                 ? LayoutBuilder(
                     builder: (context, constraints) {
-                      return CameraMacOSView(
-                        key: ValueKey(_selectedCamera!.deviceId),
-                        deviceId: _selectedCamera!.deviceId,
-                        cameraMode: CameraMacOSMode.video,
-                        fit: BoxFit.cover,
-                        onCameraInizialized: (controller) {
-                          // _controller = controller;
-                        },
+                      return Stack(
+                        children: [
+                          Positioned.fill(
+                            child: CameraMacOSView(
+                              key: ValueKey(_selectedCamera!.deviceId),
+                              deviceId: _selectedCamera!.deviceId,
+                              cameraMode: CameraMacOSMode.video,
+                              fit: BoxFit.cover,
+                              onCameraInizialized: (controller) {},
+                            ),
+                          ),
+                          // Оверлей детекции лиц
+                          ValueListenableBuilder<List<FaceDetection>>(
+                            valueListenable: VisionService().detectionsNotifier,
+                            builder: (context, detections, _) {
+                              return Stack(
+                                children: detections.map((d) => _buildDetectionBox(d, constraints.biggest)).toList(),
+                              );
+                            },
+                          ),
+                        ],
                       );
                     },
                   )
@@ -161,6 +175,42 @@ class _ViewportCamState extends State<ViewportCam> {
                   ),
                 ],
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetectionBox(FaceDetection detection, Size viewportSize) {
+    // В реальности координаты детекции (0-1) нужно мапить на размер вьюпорта.
+    // Если boundingBox в VisionService уже в пикселях симуляции, используем их напрямую или мапим.
+    // Для нашего примера используем упрощенный маппинг.
+    return Positioned(
+      left: detection.boundingBox.left,
+      top: detection.boundingBox.top,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: detection.boundingBox.width,
+            height: detection.boundingBox.height,
+            decoration: BoxDecoration(
+              border: Border.all(color: const Color(0xFF03A9F4), width: 2),
+              boxShadow: [
+                BoxShadow(color: Colors.black26, blurRadius: 4, spreadRadius: 1),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+            decoration: const BoxDecoration(
+              color: Color(0xFF03A9F4),
+              borderRadius: BorderRadius.only(bottomRight: Radius.circular(4)),
+            ),
+            child: Text(
+              '${detection.name ?? "Unknown"} ${(detection.confidence * 100).round()}%',
+              style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
             ),
           ),
         ],
