@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:camera_macos/camera_macos.dart';
-import '../../backend/vision_service.dart';
+import '../backend/vision_service.dart';
 
 class ViewportCam extends StatefulWidget {
   const ViewportCam({super.key});
