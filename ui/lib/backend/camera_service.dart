@@ -17,6 +17,12 @@ class CameraService {
   factory CameraService() => _instance;
   CameraService._internal();
 
+  /// Загрузить список камер (alias для обратной совместимости)
+  Future<List<CameraInfo>> loadCameras() => getAvailableCameras();
+
+  /// Обновить список камер (alias)
+  Future<List<CameraInfo>> refreshCameras() => getAvailableCameras();
+
   /// Получить список доступных камер через системную утилиту system_profiler
   Future<List<CameraInfo>> getAvailableCameras() async {
     if (!Platform.isMacOS) return [];
