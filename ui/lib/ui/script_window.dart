@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:path/path.dart' as p;
 import '../backend/camera_service.dart';
+import '../backend/vision_service.dart';
 
 // ============================================================
 // Модели данных
@@ -121,6 +122,8 @@ const List<BlockDefinition> kBlockCatalog = [
   BlockDefinition(id: 'string_concat', name: 'String Join', category: 'Data', color: Color(0xFF00ACC1), icon: Icons.text_fields, inputs: 2, outputs: 1),
   // Hardware
   BlockDefinition(id: 'cam', name: 'Cam', category: 'Hardware', color: Color(0xFF8BC34A), icon: Icons.videocam, inputs: 0, outputs: 1),
+  // Vision
+  BlockDefinition(id: 'face_vision', name: 'Face Vision', category: 'Vision', color: Color(0xFF03A9F4), icon: Icons.face, inputs: 1, outputs: 1),
 ];
 
 // ============================================================
@@ -173,6 +176,11 @@ class _ScriptWindowState extends State<ScriptWindow> {
   // Камеры
   List<CameraInfo> _availableCameras = [];
   bool _camerasLoaded = false;
+
+  // Script Runtime
+  bool _isRunning = false;
+  List<FaceDetection> _activeDetections = [];
+  math.Random _random = math.Random();
 
   @override
   void initState() {
@@ -472,40 +480,206 @@ class _ScriptWindowState extends State<ScriptWindow> {
   Widget build(BuildContext context) {
     return Container(
       color: const Color(0xff1a1a1a),
+      child: Column(
+        children: [
+          _activeScript != null ? _buildToolbar() : const SizedBox.shrink(),
+          Expanded(
+            child: Row(
+              children: [
+                if (_isLeftPanelOpen) _buildLeftPanel(),
+                if (_isLeftPanelOpen)
+                  GestureDetector(
+                    onHorizontalDragUpdate: (details) {
+                      setState(() {
+                        _leftPanelWidth = (_leftPanelWidth + details.delta.dx).clamp(200.0, 350.0);
+                      });
+                    },
+                    child: MouseRegion(
+                      cursor: SystemMouseCursors.resizeLeftRight,
+                      child: Container(width: 4, color: Colors.transparent),
+                    ),
+                  ),
+                Expanded(
+                  child: Stack(
+                    children: [
+                      _activeScript == null
+                          ? _buildEmptyCanvas()
+                          : _buildCanvas(),
+                      // Viewport Overlay
+                      if (_isRunning) _buildViewportOverlay(),
+                    ],
+                  ),
+                ),
+                if (_activeScript != null && (_isShopOpen || _selectedNodeId != null))
+                  GestureDetector(
+                    onHorizontalDragUpdate: (details) {
+                      setState(() {
+                        _rightPanelWidth = (_rightPanelWidth - details.delta.dx).clamp(200.0, 400.0);
+                      });
+                    },
+                    child: MouseRegion(
+                      cursor: SystemMouseCursors.resizeLeftRight,
+                      child: Container(width: 4, color: Colors.transparent),
+                    ),
+                  ),
+                if (_activeScript != null && (_isShopOpen || _selectedNodeId != null))
+                  _buildRightPanel(),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildToolbar() {
+    return Container(
+      height: 48,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      decoration: const BoxDecoration(
+        color: Color(0xff141414),
+        border: Border(bottom: BorderSide(color: Colors.white10)),
+      ),
       child: Row(
         children: [
-          if (_isLeftPanelOpen) _buildLeftPanel(),
-          if (_isLeftPanelOpen)
-            GestureDetector(
-              onHorizontalDragUpdate: (details) {
-                setState(() {
-                  _leftPanelWidth = (_leftPanelWidth + details.delta.dx).clamp(200.0, 350.0);
-                });
-              },
-              child: MouseRegion(
-                cursor: SystemMouseCursors.resizeLeftRight,
-                child: Container(width: 4, color: Colors.transparent),
-              ),
-            ),
-          Expanded(
-            child: _activeScript == null
-                ? _buildEmptyCanvas()
-                : _buildCanvas(),
+          Text(_activeScript ?? '', style: const TextStyle(color: Colors.white38, fontSize: 12)),
+          const Spacer(),
+          _buildActionButton(
+            label: 'ПУСК',
+            icon: Icons.play_arrow,
+            color: const Color(0xFF4CAF50),
+            isActive: !_isRunning,
+            onPressed: _startScript,
           ),
-          if (_activeScript != null && (_isShopOpen || _selectedNodeId != null))
-            GestureDetector(
-              onHorizontalDragUpdate: (details) {
-                setState(() {
-                  _rightPanelWidth = (_rightPanelWidth - details.delta.dx).clamp(200.0, 400.0);
-                });
-              },
-              child: MouseRegion(
-                cursor: SystemMouseCursors.resizeLeftRight,
-                child: Container(width: 4, color: Colors.transparent),
-              ),
+          const SizedBox(width: 8),
+          _buildActionButton(
+            label: 'СТОП',
+            icon: Icons.stop,
+            color: const Color(0xFFF44336),
+            isActive: _isRunning,
+            onPressed: _stopScript,
+          ),
+          const SizedBox(width: 16),
+          _buildActionButton(
+            label: 'SHOP',
+            icon: Icons.add_box,
+            color: Colors.white70,
+            isActive: true,
+            onPressed: () => setState(() => _isShopOpen = !_isShopOpen),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionButton({required String label, required IconData icon, required Color color, required bool isActive, required VoidCallback onPressed}) {
+    return InkWell(
+      onTap: isActive ? onPressed : null,
+      borderRadius: BorderRadius.circular(6),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: isActive ? color.withValues(alpha: 0.15) : Colors.white.withValues(alpha: 0.05),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: isActive ? color.withValues(alpha: 0.3) : Colors.white10),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: isActive ? color : Colors.white24, size: 16),
+            const SizedBox(width: 6),
+            Text(label, style: TextStyle(color: isActive ? color : Colors.white24, fontSize: 11, fontWeight: FontWeight.bold)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _startScript() {
+    setState(() {
+      _isRunning = true;
+    });
+    // Запуск имитации детекции
+    _runSimulation();
+  }
+
+  void _stopScript() {
+    setState(() {
+      _isRunning = false;
+      _activeDetections = [];
+    });
+  }
+
+  void _runSimulation() async {
+    while (_isRunning) {
+      await Future.delayed(const Duration(milliseconds: 500));
+      if (!_isRunning) break;
+      if (mounted) {
+        setState(() {
+          _activeDetections = VisionService().generateMockDetections();
+        });
+      }
+    }
+  }
+
+  Widget _buildViewportOverlay() {
+    return Positioned(
+      bottom: 20,
+      right: 20,
+      child: Container(
+        width: 320,
+        height: 240,
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.8),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFF03A9F4).withValues(alpha: 0.5), width: 2),
+          boxShadow: [
+            BoxShadow(color: Colors.black54, blurRadius: 10, spreadRadius: 2),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: Stack(
+            children: [
+              // Фон (симуляция камеры)
+              Container(color: Colors.grey[900]),
+              const Center(child: Icon(Icons.videocam_off, color: Colors.white10, size: 48)),
+              if (_activeDetections.isEmpty)
+                const Positioned(
+                  top: 10,
+                  left: 10,
+                  child: Text('SCANNING...', style: TextStyle(color: Color(0xFF03A9F4), fontSize: 10, fontWeight: FontWeight.bold)),
+                ),
+              // Отрисовка рамок лиц
+              ..._activeDetections.map((d) => _buildDetectionBox(d)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDetectionBox(FaceDetection detection) {
+    return Positioned(
+      left: detection.boundingBox.left,
+      top: detection.boundingBox.top,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: detection.boundingBox.width,
+            height: detection.boundingBox.height,
+            decoration: BoxDecoration(
+              border: Border.all(color: const Color(0xFF03A9F4), width: 2),
             ),
-          if (_activeScript != null && (_isShopOpen || _selectedNodeId != null))
-            _buildRightPanel(),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+            color: const Color(0xFF03A9F4),
+            child: Text(
+              '${detection.name ?? "Unknown"} ${(detection.confidence * 100).round()}%',
+              style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+            ),
+          ),
         ],
       ),
     );
@@ -565,16 +739,112 @@ class _ScriptWindowState extends State<ScriptWindow> {
     );
   }
 
-  /// Построение специфических настроек в зависимости от типа блока
   List<Widget> _buildBlockSpecificSettings(ScriptNode node) {
     switch (node.definition.id) {
       case 'cam':
         return _buildCamSettings(node);
+      case 'face_vision':
+        return _buildFaceVisionSettings(node);
       default:
         return [
           const Center(child: Text('Нет дополнительных настроек', style: TextStyle(color: Colors.white24, fontSize: 12))),
         ];
     }
+  }
+
+  /// Настройки блока Face Vision
+  List<Widget> _buildFaceVisionSettings(ScriptNode node) {
+    final fps = node.properties['fps'] ?? 15.0;
+    final visionService = VisionService();
+
+    return [
+      const Text('Частота кадров (FPS)', style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.bold)),
+      Slider(
+        value: fps.toDouble(),
+        min: 1,
+        max: 60,
+        divisions: 59,
+        label: fps.round().toString(),
+        activeColor: const Color(0xFF03A9F4),
+        onChanged: (val) {
+          setState(() => node.properties['fps'] = val);
+          _saveCurrentScript();
+        },
+      ),
+      const SizedBox(height: 16),
+      Row(
+        children: [
+          const Expanded(child: Text('База лиц', style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.bold))),
+          IconButton(
+            icon: const Icon(Icons.add_circle_outline, size: 18, color: Color(0xFF03A9F4)),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+            onPressed: () => _showAddFaceDialog(),
+          ),
+        ],
+      ),
+      const SizedBox(height: 8),
+      Container(
+        height: 150,
+        decoration: BoxDecoration(
+          color: Colors.black26,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.white10),
+        ),
+        child: visionService.faceDb.isEmpty
+            ? const Center(child: Text('База пуста', style: TextStyle(color: Colors.white24, fontSize: 11)))
+            : ListView.builder(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                itemCount: visionService.faceDb.length,
+                itemBuilder: (context, i) {
+                  final face = visionService.faceDb[i];
+                  return ListTile(
+                    dense: true,
+                    leading: const Icon(Icons.face, size: 16, color: Colors.white38),
+                    title: Text(face.name, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.delete_outline, size: 14, color: Colors.redAccent),
+                      onPressed: () => setState(() => visionService.removeFace(face.id)),
+                    ),
+                  );
+                },
+              ),
+      ),
+    ];
+  }
+
+  void _showAddFaceDialog() {
+    final TextEditingController nameController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xff1e1e1e),
+        title: const Text('Добавить лицо', style: TextStyle(color: Colors.white, fontSize: 16)),
+        content: TextField(
+          controller: nameController,
+          style: const TextStyle(color: Colors.white),
+          decoration: const InputDecoration(
+            hintText: 'Имя человека',
+            hintStyle: TextStyle(color: Colors.white24),
+            enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white10)),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Отмена')),
+          TextButton(
+            onPressed: () {
+              if (nameController.text.isNotEmpty) {
+                setState(() {
+                  VisionService().addFace(nameController.text, [0.1, 0.2]); // Mock embedding
+                });
+                Navigator.pop(context);
+              }
+            },
+            child: const Text('Добавить', style: TextStyle(color: Color(0xFF03A9F4))),
+          ),
+        ],
+      ),
+    );
   }
 
   /// Настройки блока Cam — выбор камеры
