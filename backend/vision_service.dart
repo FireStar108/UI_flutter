@@ -63,6 +63,7 @@ class VisionService {
 
   final List<FaceRecord> _faceDb = [];
   bool _isInitialized = false;
+  final ValueNotifier<List<FaceDetection>> detectionsNotifier = ValueNotifier([]);
 
   List<FaceRecord> get faceDb => _faceDb;
 
@@ -101,14 +102,18 @@ class VisionService {
 
   /// Метод для генерации фиктивных данных детекции (для UI/Viewport)
   List<FaceDetection> generateMockDetections() {
-    if (_faceDb.isEmpty) return [];
+    // Если база пуста, показываем "Unknown" для теста
+    final String name = _faceDb.isEmpty ? "Unknown" : _faceDb.first.name;
     
-    // Возвращаем детекцию для первого человека в базе для теста
+    // Добавляем немного "дрожания" для реалистичности
+    final double jitterX = (DateTime.now().millisecondsSinceEpoch % 10) - 5;
+    final double jitterY = (DateTime.now().millisecondsSinceEpoch % 8) - 4;
+
     return [
       FaceDetection(
-        boundingBox: const Rect.fromLTWH(100, 100, 150, 150),
-        name: _faceDb.first.name,
-        confidence: 0.98,
+        boundingBox: Rect.fromLTWH(120 + jitterX, 80 + jitterY, 130, 130),
+        name: name,
+        confidence: 0.85 + (jitterX.abs() / 100),
       )
     ];
   }
