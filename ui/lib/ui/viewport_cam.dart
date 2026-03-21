@@ -44,21 +44,26 @@ class _ViewportCamState extends State<ViewportCam> {
 
   void _startAnalysisLoop() async {
     while (_selectedCamera != null && mounted) {
-      if (_controller != null && VisionService().detectionsNotifier.hasListeners) {
+      final vision = VisionService();
+      // Анализируем только если симуляция запущена И блоки соединены
+      if (_controller != null && vision.isAnalysisEnabled) {
         try {
           final imageData = await _controller!.takePicture();
           if (imageData != null && imageData.bytes != null) {
-            final detections = await VisionService().processFrame(imageData.bytes!);
+            final detections = await vision.processFrame(imageData.bytes!);
             if (mounted) {
-              VisionService().detectionsNotifier.value = detections;
+              vision.detectionsNotifier.value = detections;
             }
           }
         } catch (e) {
           debugPrint('VIEWPORT: Error in analysis loop: $e');
         }
+      } else if (!vision.isAnalysisEnabled && vision.detectionsNotifier.value.isNotEmpty) {
+        // Если связь пропала или симуляция стоп — очищаем
+        vision.detectionsNotifier.value = [];
       }
-      // Интервал анализа (по умолчанию 500мс для производительности)
-      await Future.delayed(const Duration(milliseconds: 500));
+      // Интервал анализа
+      await Future.delayed(const Duration(milliseconds: 300));
     }
   }
 
@@ -68,6 +73,7 @@ class _ViewportCamState extends State<ViewportCam> {
       _isInitialized = false;
       _controller = null;
     });
+    VisionService().detectionsNotifier.value = [];
   }
 
   @override
@@ -211,41 +217,85 @@ class _ViewportCamState extends State<ViewportCam> {
   }
 
   Widget _buildDetectionBox(FaceDetection detection, Size viewportSize) {
-    // Координаты приходят нормализованные (0-1), мапим их на размер вьюпорта
-    final double left = detection.boundingBox.left * viewportSize.width;
-    final double top = detection.boundingBox.top * viewportSize.height;
-    final double width = detection.boundingBox.width * viewportSize.width;
-    final double height = detection.boundingBox.height * viewportSize.height;
-
-    return Positioned(
-      left: left,
-      top: top,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: width,
-            height: height,
-            decoration: BoxDecoration(
-              border: Border.all(color: const Color(0xFF03A9F4), width: 2),
-              boxShadow: [
-                BoxShadow(color: Colors.black26, blurRadius: 4, spreadRadius: 1),
-              ],
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-            decoration: const BoxDecoration(
-              color: Color(0xFF03A9F4),
-              borderRadius: BorderRadius.only(bottomRight: Radius.circular(4)),
-            ),
-            child: Text(
-              '${detection.name ?? "Unknown"} ${(detection.confidence * 100).round()}%',
-              style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
-            ),
-          ),
-        ],
+    return Positioned.fill(
+      child: CustomPaint(
+        painter: FacePainter(
+          detection: detection,
+          viewportSize: viewportSize,
+        ),
       ),
     );
   }
+}
+
+class FacePainter extends CustomPainter {
+  final FaceDetection detection;
+  final Size viewportSize;
+
+  FacePainter({required this.detection, required this.viewportSize});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (detection.oval.isEmpty) return;
+
+    final paint = Paint()
+      ..color = const Color(0xFF03A9F4)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.0
+      ..strokeCap = StrokeCap.round;
+
+    final path = Path();
+    
+    // Мапим первую точку
+    final firstPoint = Offset(
+      detection.oval[0].dx * viewportSize.width,
+      detection.oval[0].dy * viewportSize.height,
+    );
+    path.moveTo(firstPoint.dx, firstPoint.dy);
+
+    // Рисуем остальные точки овала
+    for (int i = 1; i < detection.oval.length; i++) {
+      path.lineTo(
+        detection.oval[i].dx * viewportSize.width,
+        detection.oval[i].dy * viewportSize.height,
+      );
+    }
+    path.close();
+
+    // Свечение
+    canvas.drawPath(path, Paint()
+      ..color = const Color(0xFF03A9F4).withValues(alpha: 0.3)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 4.0
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4));
+
+    canvas.drawPath(path, paint);
+
+    // Текст с именем
+    if (detection.name != null) {
+      final textPainter = TextPainter(
+        text: TextSpan(
+          text: '${detection.name} ${(detection.confidence * 100).round()}%',
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            backgroundColor: Color(0xFF03A9F4),
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      );
+      textPainter.layout();
+      
+      // Позиционируем над верхней точкой овала (индекс 10 в MP Mesh это верх лба)
+      final topPoint = Offset(
+        detection.oval[0].dx * viewportSize.width,
+        detection.oval[0].dy * viewportSize.height - 20,
+      );
+      textPainter.paint(canvas, topPoint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(FacePainter oldDelegate) => true;
 }

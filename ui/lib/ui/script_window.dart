@@ -6,6 +6,7 @@ import 'package:flutter/gestures.dart';
 import 'package:path/path.dart' as p;
 import '../backend/camera_service.dart';
 import '../backend/vision_service.dart';
+import 'package:file_picker/file_picker.dart';
 
 // ============================================================
 // Модели данных
@@ -586,7 +587,7 @@ class _ScriptWindowState extends State<ScriptWindow> {
     );
   }
 
-  void _startScript() {
+  void _startScript() async {
     setState(() {
       _isRunning = true;
     });
@@ -607,10 +608,40 @@ class _ScriptWindowState extends State<ScriptWindow> {
       }
     }
 
-    // Запуск Python-бэкенда
-    VisionService().startBackend(root);
+    final vision = VisionService();
+    await vision.startBackend(root);
+
+    // 1. Собираем данные для обучения из всех блоков Face Vision в текущем скрипте
+    final faceNodes = _nodes.where((n) => n.definition.id == 'face_vision').toList();
+    final List<Map<String, dynamic>> persons = [];
+    for (final node in faceNodes) {
+      if (node.properties['faces'] != null && (node.properties['faces'] as List).isNotEmpty) {
+        persons.add({
+          'name': '${node.definition.name} ${node.id.substring(0, 4)}',
+          'faces': node.properties['faces'],
+        });
+      }
+    }
+
+    if (persons.isNotEmpty) {
+      debugPrint('SCRIPT: Training vision with ${persons.length} persons');
+      await vision.train(persons);
+    }
+
+    // 2. Проверяем наличие связи Cam -> Face Vision
+    bool hasVisionLink = false;
+    final camNodes = _nodes.where((n) => n.definition.id == 'cam').toList();
+    for (final cam in camNodes) {
+      final connectedTo = _connections.where((c) => c.fromNodeId == cam.id).map((c) => c.toNodeId).toList();
+      if (_nodes.any((n) => connectedTo.contains(n.id) && n.definition.id == 'face_vision')) {
+        hasVisionLink = true;
+        break;
+      }
+    }
     
-    // Запуск имитации для обратной совместимости (теперь она будет ждать реальных данных)
+    vision.isAnalysisEnabled = hasVisionLink;
+
+    debugPrint('SCRIPT: Simulation started. hasVisionLink: $hasVisionLink');
     _runSimulation();
   }
 
@@ -704,16 +735,19 @@ class _ScriptWindowState extends State<ScriptWindow> {
 
   /// Настройки блока Face Vision
   List<Widget> _buildFaceVisionSettings(ScriptNode node) {
-    final fps = node.properties['fps'] ?? 15.0;
-    final visionService = VisionService();
+    if (node.properties['faces'] == null) {
+      node.properties['faces'] = [];
+    }
+    final List faces = node.properties['faces'];
+    final double fps = (node.properties['fps'] ?? 5.0).toDouble();
 
     return [
-      const Text('Частота кадров (FPS)', style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.bold)),
+      const Text('Частота анализа (FPS)', style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.bold)),
       Slider(
-        value: fps.toDouble(),
+        value: fps,
         min: 1,
-        max: 60,
-        divisions: 59,
+        max: 30,
+        divisions: 29,
         label: fps.round().toString(),
         activeColor: const Color(0xFF03A9F4),
         onChanged: (val) {
@@ -724,37 +758,44 @@ class _ScriptWindowState extends State<ScriptWindow> {
       const SizedBox(height: 16),
       Row(
         children: [
-          const Expanded(child: Text('База лиц', style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.bold))),
+          const Expanded(child: Text('База лиц блока', style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.bold))),
           IconButton(
-            icon: const Icon(Icons.add_circle_outline, size: 18, color: Color(0xFF03A9F4)),
+            icon: const Icon(Icons.add_a_photo, size: 18, color: Color(0xFF03A9F4)),
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),
-            onPressed: () => _showAddFaceDialog(),
+            onPressed: () => _showAddFaceDialogV2(node),
           ),
         ],
       ),
+      const Text('Добавьте фото для узнавания человека', style: TextStyle(color: Colors.white24, fontSize: 10)),
       const SizedBox(height: 8),
       Container(
-        height: 150,
+        height: 200,
         decoration: BoxDecoration(
           color: Colors.black26,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(color: Colors.white10),
         ),
-        child: visionService.faceDb.isEmpty
-            ? const Center(child: Text('База пуста', style: TextStyle(color: Colors.white24, fontSize: 11)))
+        child: faces.isEmpty
+            ? const Center(child: Text('Нет эталонных лиц', style: TextStyle(color: Colors.white24, fontSize: 11)))
             : ListView.builder(
                 padding: const EdgeInsets.symmetric(vertical: 4),
-                itemCount: visionService.faceDb.length,
+                itemCount: faces.length,
                 itemBuilder: (context, i) {
-                  final face = visionService.faceDb[i];
+                  final face = Map<String, dynamic>.from(faces[i]);
+                  final path = face['path'] as String?;
                   return ListTile(
                     dense: true,
-                    leading: const Icon(Icons.face, size: 16, color: Colors.white38),
-                    title: Text(face.name, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                    leading: path != null && File(path).existsSync()
+                      ? ClipRRect(borderRadius: BorderRadius.circular(4), child: Image.file(File(path), width: 32, height: 32, fit: BoxFit.cover))
+                      : const Icon(Icons.face, size: 16, color: Colors.white38),
+                    title: Text(face['name'] ?? 'Без имени', style: const TextStyle(color: Colors.white70, fontSize: 12)),
                     trailing: IconButton(
                       icon: const Icon(Icons.delete_outline, size: 14, color: Colors.redAccent),
-                      onPressed: () => setState(() => visionService.removeFace(face.id)),
+                      onPressed: () {
+                        setState(() => faces.removeAt(i));
+                        _saveCurrentScript();
+                      },
                     ),
                   );
                 },
@@ -763,21 +804,35 @@ class _ScriptWindowState extends State<ScriptWindow> {
     ];
   }
 
-  void _showAddFaceDialog() {
-    final TextEditingController nameController = TextEditingController();
+  void _showAddFaceDialogV2(ScriptNode node) async {
+    final result = await FilePicker.platform.pickFiles(type: FileType.image);
+    if (result == null || result.files.single.path == null) return;
+
+    final path = result.files.single.path!;
+    final nameController = TextEditingController();
+
+    if (!mounted) return;
+    
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xff1e1e1e),
-        title: const Text('Добавить лицо', style: TextStyle(color: Colors.white, fontSize: 16)),
-        content: TextField(
-          controller: nameController,
-          style: const TextStyle(color: Colors.white),
-          decoration: const InputDecoration(
-            hintText: 'Имя человека',
-            hintStyle: TextStyle(color: Colors.white24),
-            enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white10)),
-          ),
+        title: const Text('Как зовут этого человека?', style: TextStyle(color: Colors.white, fontSize: 16)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ClipRRect(borderRadius: BorderRadius.circular(8), child: Image.file(File(path), height: 100, fit: BoxFit.cover)),
+            const SizedBox(height: 16),
+            TextField(
+              controller: nameController,
+              style: const TextStyle(color: Colors.white),
+              autofocus: true,
+              decoration: const InputDecoration(
+                hintText: 'Имя',
+                hintStyle: TextStyle(color: Colors.white24),
+              ),
+            ),
+          ],
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Отмена')),
@@ -785,12 +840,17 @@ class _ScriptWindowState extends State<ScriptWindow> {
             onPressed: () {
               if (nameController.text.isNotEmpty) {
                 setState(() {
-                  VisionService().addFace(nameController.text, [0.1, 0.2]); // Mock embedding
+                  final faces = node.properties['faces'] as List;
+                  faces.add({
+                    'name': nameController.text,
+                    'path': path,
+                  });
                 });
+                _saveCurrentScript();
                 Navigator.pop(context);
               }
             },
-            child: const Text('Добавить', style: TextStyle(color: Color(0xFF03A9F4))),
+            child: const Text('Сохранить', style: TextStyle(color: Color(0xFF03A9F4))),
           ),
         ],
       ),

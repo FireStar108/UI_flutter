@@ -11,11 +11,13 @@ class FaceDetection {
   final Rect boundingBox;
   final String? name;
   final double confidence;
+  final List<Offset> oval; // Точки контура лица
 
   FaceDetection({
     required this.boundingBox,
     this.name,
     this.confidence = 0.0,
+    this.oval = const [],
   });
 
   Map<String, dynamic> toJson() => {
@@ -25,6 +27,7 @@ class FaceDetection {
     'h': boundingBox.height,
     'name': name,
     'confidence': confidence,
+    'oval': oval.map((o) => {'x': o.dx, 'y': o.dy}).toList(),
   };
 }
 
@@ -32,20 +35,17 @@ class FaceDetection {
 class FaceRecord {
   final String id;
   final String name;
-  final List<double> embedding;
   final String? imagePath;
 
   FaceRecord({
     required this.id,
     required this.name,
-    required this.embedding,
     this.imagePath,
   });
 
   Map<String, dynamic> toJson() => {
     'id': id,
     'name': name,
-    'embedding': embedding,
     'imagePath': imagePath,
   };
 
@@ -53,7 +53,6 @@ class FaceRecord {
     return FaceRecord(
       id: json['id'],
       name: json['name'],
-      embedding: List<double>.from(json['embedding']),
       imagePath: json['imagePath'],
     );
   }
@@ -65,12 +64,10 @@ class VisionService {
   factory VisionService() => _instance;
   VisionService._internal();
 
-  final List<FaceRecord> _faceDb = [];
   bool _isInitialized = false;
+  bool isAnalysisEnabled = false; // Флаг: разрешено ли анализировать лица (есть ли связь в скрипте)
   final ValueNotifier<List<FaceDetection>> detectionsNotifier = ValueNotifier([]);
   Process? _pythonProcess;
-
-  List<FaceRecord> get faceDb => _faceDb;
 
   Future<void> initialize() async {
     if (_isInitialized) return;
@@ -111,19 +108,47 @@ class VisionService {
     detectionsNotifier.value = [];
   }
 
-  /// Добавить лицо в базу
-  void addFace(String name, List<double> embedding, {String? imagePath}) {
-    _faceDb.add(FaceRecord(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      name: name,
-      embedding: embedding,
-      imagePath: imagePath,
-    ));
-  }
+  /// Обучение нейросети на базе лиц из блоков
+  Future<void> train(List<Map<String, dynamic>> persons) async {
+    try {
+      final List<Map<String, dynamic>> trainingData = [];
+      
+      for (final p in persons) {
+        final List<String> imagesBase64 = [];
+        final List faces = p['faces'] ?? [];
+        
+        for (final face in faces) {
+          final path = face['path'] as String?;
+          if (path != null && File(path).existsSync()) {
+            final bytes = await File(path).readAsBytes();
+            imagesBase64.add(base64Encode(bytes));
+          }
+        }
+        
+        if (imagesBase64.isNotEmpty) {
+          trainingData.add({
+            'name': p['name'], // Это можнт быть имя ноды или общее имя
+            'images': imagesBase64,
+          });
+        }
+      }
 
-  /// Удалить лицо из базы
-  void removeFace(String id) {
-    _faceDb.removeWhere((f) => f.id == id);
+      if (trainingData.isEmpty) return;
+
+      final response = await http.post(
+        Uri.parse('http://127.0.0.1:8000/train'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'persons': trainingData}),
+      );
+
+      if (response.statusCode == 200) {
+        debugPrint('VISION: Training successful: ${response.body}');
+      } else {
+        debugPrint('VISION: Training failed: ${response.statusCode}');
+      }
+    } catch (e) {
+      debugPrint('VISION: Error during training: $e');
+    }
   }
 
   /// Обработка кадра через Python-бэкенд
@@ -147,17 +172,19 @@ class VisionService {
         final List<dynamic> detectionsJson = json['detections'];
 
         return detectionsJson.map((d) {
-          // Координаты приходят нормализованные (0-1)
-          // Мы пока возвращаем их как есть, а ViewportCam будет их мапить на свой размер
+          final List<dynamic> ovalJson = d['oval'] ?? [];
+          final oval = ovalJson.map((p) => Offset((p['x'] as num).toDouble(), (p['y'] as num).toDouble())).toList();
+
           return FaceDetection(
             boundingBox: Rect.fromLTWH(
-              d['x'] * 1.0, 
-              d['y'] * 1.0, 
-              d['w'] * 1.0, 
-              d['h'] * 1.0
+              (d['x'] as num).toDouble(), 
+              (num.parse(d['y'].toString())).toDouble(), 
+              (d['w'] as num).toDouble(), 
+              (d['h'] as num).toDouble()
             ),
-            name: _faceDb.isEmpty ? "Unknown" : _faceDb.first.name, // Заглушка для имени пока
-            confidence: d['confidence'],
+            name: d['name'],
+            confidence: (d['confidence'] as num).toDouble(),
+            oval: oval,
           );
         }).toList();
       }
