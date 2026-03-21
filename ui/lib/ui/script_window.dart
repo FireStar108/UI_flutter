@@ -590,7 +590,27 @@ class _ScriptWindowState extends State<ScriptWindow> {
     setState(() {
       _isRunning = true;
     });
-    // Запуск имитации детекции
+    
+    // Пытаемся найти корень проекта (над папкой ui или по пути скриптов)
+    String root = Directory.current.path;
+    if (root.endsWith('ui')) {
+      root = p.dirname(root);
+    } else if (widget.projectDirectory != null) {
+      // Идем вверх пока не найдем backend или пока не кончатся папки
+      String current = widget.projectDirectory!;
+      while (current.length > 5) {
+        if (Directory(p.join(current, 'backend')).existsSync()) {
+          root = current;
+          break;
+        }
+        current = p.dirname(current);
+      }
+    }
+
+    // Запуск Python-бэкенда
+    VisionService().startBackend(root);
+    
+    // Запуск имитации для обратной совместимости (теперь она будет ждать реальных данных)
     _runSimulation();
   }
 
@@ -598,7 +618,7 @@ class _ScriptWindowState extends State<ScriptWindow> {
     setState(() {
       _isRunning = false;
     });
-    VisionService().detectionsNotifier.value = [];
+    VisionService().stopBackend();
   }
 
   void _runSimulation() async {

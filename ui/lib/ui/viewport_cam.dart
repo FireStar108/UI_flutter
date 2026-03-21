@@ -10,7 +10,7 @@ class ViewportCam extends StatefulWidget {
 }
 
 class _ViewportCamState extends State<ViewportCam> {
-  // CameraMacOSController? _controller; // Убрано, так как не используется
+  CameraMacOSController? _controller;
   List<CameraMacOSDevice> _cameras = [];
   bool _isInitialized = false;
   CameraMacOSDevice? _selectedCamera;
@@ -39,13 +39,34 @@ class _ViewportCamState extends State<ViewportCam> {
       _selectedCamera = camera;
       _isInitialized = true;
     });
+    _startAnalysisLoop();
+  }
+
+  void _startAnalysisLoop() async {
+    while (_selectedCamera != null && mounted) {
+      if (_controller != null && VisionService().detectionsNotifier.hasListeners) {
+        try {
+          final imageData = await _controller!.takePicture();
+          if (imageData != null && imageData.bytes != null) {
+            final detections = await VisionService().processFrame(imageData.bytes!);
+            if (mounted) {
+              VisionService().detectionsNotifier.value = detections;
+            }
+          }
+        } catch (e) {
+          debugPrint('VIEWPORT: Error in analysis loop: $e');
+        }
+      }
+      // Интервал анализа (по умолчанию 500мс для производительности)
+      await Future.delayed(const Duration(milliseconds: 500));
+    }
   }
 
   void _stopCamera() {
     setState(() {
       _selectedCamera = null;
       _isInitialized = false;
-      // _controller = null;
+      _controller = null;
     });
   }
 
@@ -69,7 +90,11 @@ class _ViewportCamState extends State<ViewportCam> {
                               deviceId: _selectedCamera!.deviceId,
                               cameraMode: CameraMacOSMode.video,
                               fit: BoxFit.cover,
-                              onCameraInizialized: (controller) {},
+                              onCameraInizialized: (controller) {
+                                setState(() {
+                                  _controller = controller;
+                                });
+                              },
                             ),
                           ),
                           // Оверлей детекции лиц
@@ -186,18 +211,21 @@ class _ViewportCamState extends State<ViewportCam> {
   }
 
   Widget _buildDetectionBox(FaceDetection detection, Size viewportSize) {
-    // В реальности координаты детекции (0-1) нужно мапить на размер вьюпорта.
-    // Если boundingBox в VisionService уже в пикселях симуляции, используем их напрямую или мапим.
-    // Для нашего примера используем упрощенный маппинг.
+    // Координаты приходят нормализованные (0-1), мапим их на размер вьюпорта
+    final double left = detection.boundingBox.left * viewportSize.width;
+    final double top = detection.boundingBox.top * viewportSize.height;
+    final double width = detection.boundingBox.width * viewportSize.width;
+    final double height = detection.boundingBox.height * viewportSize.height;
+
     return Positioned(
-      left: detection.boundingBox.left,
-      top: detection.boundingBox.top,
+      left: left,
+      top: top,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            width: detection.boundingBox.width,
-            height: detection.boundingBox.height,
+            width: width,
+            height: height,
             decoration: BoxDecoration(
               border: Border.all(color: const Color(0xFF03A9F4), width: 2),
               boxShadow: [

@@ -1,7 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:path/path.dart' as p;
 
 /// Данные о распознанном лице
 class FaceDetection {
@@ -56,7 +59,7 @@ class FaceRecord {
   }
 }
 
-/// Сервис компьютерного зрения (Face Recognition)
+/// Сервис компьютерного зрения (Face Recognition + MediaPipe Backend)
 class VisionService {
   static final VisionService _instance = VisionService._internal();
   factory VisionService() => _instance;
@@ -65,12 +68,47 @@ class VisionService {
   final List<FaceRecord> _faceDb = [];
   bool _isInitialized = false;
   final ValueNotifier<List<FaceDetection>> detectionsNotifier = ValueNotifier([]);
+  Process? _pythonProcess;
 
   List<FaceRecord> get faceDb => _faceDb;
 
   Future<void> initialize() async {
     if (_isInitialized) return;
     _isInitialized = true;
+  }
+
+  /// Запуск Python-бэкенда
+  Future<void> startBackend(String projectRoot) async {
+    if (_pythonProcess != null) return;
+
+    final venvPython = p.join(projectRoot, 'backend', 'venv', 'bin', 'python');
+    final mainPy = p.join(projectRoot, 'backend', 'main.py');
+
+    debugPrint('VISION: Starting Python backend: $venvPython $mainPy');
+    
+    try {
+      _pythonProcess = await Process.start(venvPython, [mainPy]);
+      
+      _pythonProcess!.stdout.transform(utf8.decoder).listen((data) {
+        debugPrint('PYTHON STDOUT: $data');
+      });
+
+      _pythonProcess!.stderr.transform(utf8.decoder).listen((data) {
+        debugPrint('PYTHON STDERR: $data');
+      });
+
+      // Даем серверу время на запуск
+      await Future.delayed(const Duration(seconds: 2));
+    } catch (e) {
+      debugPrint('VISION: Failed to start Python backend: $e');
+    }
+  }
+
+  /// Остановка Python-бэкенда
+  void stopBackend() {
+    _pythonProcess?.kill();
+    _pythonProcess = null;
+    detectionsNotifier.value = [];
   }
 
   /// Добавить лицо в базу
@@ -88,27 +126,50 @@ class VisionService {
     _faceDb.removeWhere((f) => f.id == id);
   }
 
-  /// "Обработка" кадра (симуляция)
-  Future<List<FaceDetection>> processFrame(dynamic frameData, {double threshold = 0.6}) async {
-    return []; 
+  /// Обработка кадра через Python-бэкенд
+  Future<List<FaceDetection>> processFrame(Uint8List imageBytes) async {
+    try {
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('http://127.0.0.1:8000/detect'),
+      );
+      
+      request.files.add(http.MultipartFile.fromBytes(
+        'file',
+        imageBytes,
+        filename: 'frame.jpg',
+      ));
+
+      final response = await request.send();
+      if (response.statusCode == 200) {
+        final respStr = await response.stream.bytesToString();
+        final json = jsonDecode(respStr);
+        final List<dynamic> detectionsJson = json['detections'];
+
+        return detectionsJson.map((d) {
+          // Координаты приходят нормализованные (0-1)
+          // Мы пока возвращаем их как есть, а ViewportCam будет их мапить на свой размер
+          return FaceDetection(
+            boundingBox: Rect.fromLTWH(
+              d['x'] * 1.0, 
+              d['y'] * 1.0, 
+              d['w'] * 1.0, 
+              d['h'] * 1.0
+            ),
+            name: _faceDb.isEmpty ? "Unknown" : _faceDb.first.name, // Заглушка для имени пока
+            confidence: d['confidence'],
+          );
+        }).toList();
+      }
+    } catch (e) {
+      debugPrint('VISION: Error processing frame: $e');
+    }
+    return [];
   }
 
-  /// Метод для генерации фиктивных данных детекции (для UI/Viewport)
+  /// Метод для генерации данных (уже не нужен, но оставим для совместимости или уберем)
   List<FaceDetection> generateMockDetections() {
-    // Если база пуста, показываем "Unknown" для теста
-    final String name = _faceDb.isEmpty ? "Unknown" : _faceDb.first.name;
-    
-    // Используем время для более размашистого движения
-    final double time = DateTime.now().millisecondsSinceEpoch / 1000.0;
-    final double offsetX = 50 * math.sin(time);
-    final double offsetY = 30 * math.cos(time * 1.5);
-
-    return [
-      FaceDetection(
-        boundingBox: Rect.fromLTWH(100 + offsetX, 80 + offsetY, 150, 150),
-        name: name,
-        confidence: 0.85 + (0.1 * math.sin(time * 2).abs()),
-      )
-    ];
+    // В новой реализации мы не генерим моки, а ждем данных от processFrame
+    return detectionsNotifier.value;
   }
 }
