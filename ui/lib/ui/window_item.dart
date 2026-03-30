@@ -106,8 +106,8 @@ class WindowItem extends StatelessWidget {
           GlassContainer(
             width: width,
             height: height,
-            opacity: 0.8,
-            blur: 10,
+            opacity: 0.4,
+            blur: 20,
             color: Colors.grey[900]!,
             borderRadius: BorderRadius.circular(8),
             border: Border.all(color: themeColor.withValues(alpha: 0.7), width: 1.5),
@@ -120,9 +120,9 @@ class WindowItem extends StatelessWidget {
                     child: GlassContainer(
                       height: 24,
                       padding: const EdgeInsets.symmetric(horizontal: 8),
-                      opacity: 0.7,
-                      blur: 5,
-                      color: Colors.black87,
+                      opacity: 0.3,
+                      blur: 10,
+                      color: Colors.black,
                       borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
                       child: Row(
                       children: [

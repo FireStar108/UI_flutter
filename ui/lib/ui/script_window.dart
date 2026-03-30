@@ -581,8 +581,8 @@ class _ScriptWindowState extends State<ScriptWindow> {
     return GlassContainer(
       height: 48,
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      opacity: 0.7,
-      blur: 10,
+      opacity: 0.3,
+      blur: 20,
       color: const Color(0xff141414),
       border: const Border(bottom: BorderSide(color: Colors.white10)),
       child: Row(
@@ -797,7 +797,7 @@ class _ScriptWindowState extends State<ScriptWindow> {
     final node = _nodes.firstWhere((n) => n.id == _selectedNodeId, orElse: () => _nodes.first);
     return GlassContainer(
       width: _rightPanelWidth,
-      opacity: 0.6,
+      opacity: 0.4,
       blur: 20,
       color: const Color(0xff141414),
       border: const Border(left: BorderSide(color: Colors.white10)),
@@ -1403,8 +1403,8 @@ class _ScriptWindowState extends State<ScriptWindow> {
   Widget _buildLeftPanel() {
     return GlassContainer(
       width: _leftPanelWidth,
-      opacity: 0.6,
-      blur: 20,
+      opacity: 0.4,
+      blur: 25,
       color: const Color(0xff141414),
       border: const Border(right: BorderSide(color: Colors.white10)),
       child: Column(
@@ -1751,7 +1751,7 @@ class _ScriptWindowState extends State<ScriptWindow> {
     for (final b in filtered) { grouped.putIfAbsent(b.category, () => []).add(b); }
     return GlassContainer(
       width: _rightPanelWidth,
-      opacity: 0.6,
+      opacity: 0.4,
       blur: 20,
       color: const Color(0xff141414),
       border: const Border(left: BorderSide(color: Colors.white10)),

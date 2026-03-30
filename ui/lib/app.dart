@@ -58,7 +58,6 @@ class _AppState extends State<App> {
     if (projs.isEmpty) {
       active = await ProjectService().createProject('UI Workspace');
     } else {
-      // Ищем проект по последнему ID, иначе берем первый
       active = projs.firstWhere((p) => p.id == lastId, orElse: () => projs.first);
     }
     
@@ -79,7 +78,6 @@ class _AppState extends State<App> {
           }
         }
       });
-      // Сохраняем как последний активный
       _saveLastProjectId(active!.id);
     }
   }
@@ -99,7 +97,6 @@ class _AppState extends State<App> {
   }
 
   void _addWindow(String type, BuildContext buttonContext) {
-    // Временно определяем свойства нового окна
     final newWindow = WindowData(
       id: DateTime.now().toString(),
       type: type,
@@ -129,14 +126,12 @@ class _AppState extends State<App> {
     );
 
     setState(() {
-      _isAddPanelVisible = false; // Закрываем панели после выбора
+      _isAddPanelVisible = false;
       _isSettingsPanelVisible = false;
 
-      // Получаем размеры области (экран)
       final size = MediaQuery.of(context).size;
       final areaSize = Size(size.width, size.height - 60);
 
-      // Координаты старта
       final box = buttonContext.findRenderObject() as RenderBox?;
       Rect startRect;
       if (box != null) {
@@ -155,7 +150,7 @@ class _AppState extends State<App> {
 
       final key = GlobalKey();
       newWindow.isFlying = true;
-      _windows.add(newWindow); // Сразу добавляем, но оно будет Offstage
+      _windows.add(newWindow);
 
       _flyingAnimations.add(
         FlyingWindow(
@@ -169,7 +164,7 @@ class _AppState extends State<App> {
               _flyingAnimations.removeWhere((anim) => anim.key == key);
               newWindow.isFlying = false;
             });
-            _saveWorkspace(); // Сохраняем добавленное окно
+            _saveWorkspace();
           },
         ),
       );
@@ -192,12 +187,10 @@ class _AppState extends State<App> {
 
   void _removeWindow(String id) {
     setState(() {
-      // Ищем окно в активных
       try {
         final w = _windows.firstWhere((w) => w.id == id);
         _windows.remove(w);
 
-        // Расчитываем текущую позицию
         final size = MediaQuery.of(context).size;
         final areaSize = Size(size.width, size.height - 60);
         final startRect = Rect.fromLTWH(
@@ -222,11 +215,10 @@ class _AppState extends State<App> {
           ) as Widget,
         );
       } catch (e) {
-        // Если окно уже было минимизировано
         try {
           final w = _minimizedWindows.firstWhere((w) => w.id == id);
           final index = _minimizedWindows.indexOf(w);
-          w.isClosing = true; // Помечаем, чтобы скрыть из таскбара плавно
+          w.isClosing = true;
 
           final startRect = _getTaskbarItemRect(index);
 
@@ -239,7 +231,7 @@ class _AppState extends State<App> {
               onComplete: () {
                 setState(() {
                   _flyingAnimations.removeWhere((anim) => anim.key == key);
-                  _minimizedWindows.remove(w); // Окончательно удаляем после взрыва
+                  _minimizedWindows.remove(w);
                 });
                 _saveWorkspace();
               },
@@ -264,14 +256,12 @@ class _AppState extends State<App> {
       _focusWindow(w);
       w.isFlying = true;
 
-      // Начальные координаты
       final startRect = Rect.fromLTWH(
         w.relativePosition.dx * areaSize.width,
         w.relativePosition.dy * areaSize.height + 60.0,
         w.relativeSize.width * areaSize.width,
         w.relativeSize.height * areaSize.height,
       );
-      // Динамическая позиция в Taskbar в верхней панели
       final endRect = _getTaskbarItemRect(_minimizedWindows.length);
 
       final key = GlobalKey();
@@ -306,7 +296,6 @@ class _AppState extends State<App> {
       w.isFlying = true;
 
       final startRect = _getTaskbarItemRect(index);
-      // Конечные координаты (возвращаем 60px)
       final endRect = Rect.fromLTWH(
         w.relativePosition.dx * areaSize.width,
         w.relativePosition.dy * areaSize.height + 60.0,
@@ -348,7 +337,6 @@ class _AppState extends State<App> {
   void _handlePanUpdate(WindowData data, DragUpdateDetails details, Size areaSize) {
     _focusWindow(data);
     setState(() {
-      // Конвертируем дельту из пикселей в относительные координаты
       final relativeDelta = Offset(
         details.delta.dx / areaSize.width,
         details.delta.dy / areaSize.height,
@@ -371,8 +359,8 @@ class _AppState extends State<App> {
       final relativeDeltaY = delta.dy / areaSize.height;
 
       data.relativeSize = Size(
-        math.max(0.25, data.relativeSize.width + relativeDeltaX), // 0.25 - это минимальная ширина окна (25% от экрана)
-        math.max(0.25, data.relativeSize.height + relativeDeltaY), // 0.25 - это минимальная высота окна
+        math.max(0.25, data.relativeSize.width + relativeDeltaX),
+        math.max(0.25, data.relativeSize.height + relativeDeltaY),
       );
     });
   }
@@ -389,7 +377,6 @@ class _AppState extends State<App> {
       localCursor.dy / areaSize.height,
     );
 
-    // Константа отступа
     const double gap = 3.0;
     
     GridCell? targetCell;
@@ -453,109 +440,13 @@ class _AppState extends State<App> {
               }
             });
           }
-          return KeyEventResult.ignored; // Позволяем событиям идти дальше
+          return KeyEventResult.ignored;
         },
         child: Scaffold(
           body: Stack(
             children: [
-              Column(
-                children: [
-                  // Верхняя плашка
-                  GlassContainer(
-                    height: 60,
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    opacity: 0.5,
-                    blur: 15, // Больше размытия для шапки
-                    color: Colors.grey[850]!,
-                    border: const Border(bottom: BorderSide(color: Colors.white10, width: 1)),
-                    child: Row(
-                  children: [
-                    Builder(
-                      builder: (btnContext) => TextButton.icon(
-                        onPressed: () async {
-                          final proj = await showDialog<ProjectModel>(
-                            context: btnContext,
-                            barrierDismissible: true,
-                            builder: (context) => ProjectManagerDialog(currentProject: _activeProject),
-                          );
-                            if (proj != null) {
-                              setState(() {
-                                _activeProject = proj;
-                                _projectName = proj.name;
-                                _currentGridMode = GridMode.fromModeString(proj.gridModeId);
-                                _customGridMetadata = proj.gridData;
-                                
-                                _windows.clear();
-                                _minimizedWindows.clear();
-                                for (var w in proj.windows) {
-                                  if (w.isMinimized) {
-                                    _minimizedWindows.add(w);
-                                  } else {
-                                    _windows.add(w);
-                                  }
-                                }
-                              });
-                              _saveLastProjectId(proj.id);
-                            }
-                        },
-                        icon: const Icon(Icons.account_tree_outlined, color: Colors.blueAccent, size: 20),
-                      label: const Text('PROJECTS', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                      style: TextButton.styleFrom(
-                        backgroundColor: Colors.white.withValues(alpha: 0.1),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      ),
-                    ),
-                    ),
-                    const SizedBox(width: 24),
-                    Text(
-                      _projectName,
-                      style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white70, fontSize: 16),
-                    ),
-                    const SizedBox(width: 24),
-                    // Панель задач здесь
-                    Expanded(
-                      child: Taskbar(
-                        key: _taskbarKey,
-                        minimizedWindows: _minimizedWindows,
-                        onReorder: _onReorderMinimized,
-                        onRestore: (w) {
-                          // Мы не можем получить workAreaSize напрямую тут,
-                          // Поэтому используем MediaQuery и вычитаем 60px верхней панели
-                          final size = MediaQuery.of(context).size;
-                          final workAreaSize = Size(size.width, size.height - 60);
-                          _restoreWindow(w, workAreaSize);
-                        },
-                        onClose: _removeWindow,
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    ElevatedButton.icon(
-                      onPressed: _toggleSettingsPanel,
-                      icon: Icon(_isSettingsPanelVisible ? Icons.close : Icons.settings),
-                      label: const Text('Настройки'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: _isSettingsPanelVisible ? Colors.redAccent.withValues(alpha: 0.2) : Colors.white10,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    ElevatedButton.icon(
-                      onPressed: _toggleAddPanel,
-                      icon: Icon(_isAddPanelVisible ? Icons.close : Icons.add),
-                      label: const Text('Добавить окно'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: _isAddPanelVisible ? Colors.redAccent.withValues(alpha: 0.2) : Colors.white10,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              // Рабочая область
-              Expanded(
+              // 1. Рабочая область на весь экран (первый слой)
+              Positioned.fill(
                 child: LayoutBuilder(
                   builder: (context, constraints) {
                     final workAreaSize = Size(constraints.maxWidth, constraints.maxHeight);
@@ -619,9 +510,6 @@ class _AppState extends State<App> {
                           child: Center(
                             child: GlassContainer(
                               padding: const EdgeInsets.all(16),
-                              opacity: 0.6,
-                              blur: 20,
-                              color: Colors.grey[850]!,
                               borderRadius: BorderRadius.circular(12),
                               border: Border.all(color: Colors.white10),
                               child: Row(
@@ -676,9 +564,6 @@ class _AppState extends State<App> {
                           child: Center(
                             child: GlassContainer(
                               padding: const EdgeInsets.all(16),
-                              opacity: 0.6,
-                              blur: 20,
-                              color: Colors.grey[850]!,
                               borderRadius: BorderRadius.circular(12),
                               border: Border.all(color: Colors.white10),
                               child: Row(
@@ -700,13 +585,109 @@ class _AppState extends State<App> {
                   },
                 ),
               ),
+              // 2. Шапка приложения (самый верхний слой)
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: GlassContainer(
+                  height: 60,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  opacity: 0.3,
+                  blur: 20,
+                  color: Colors.grey[900]!,
+                  border: const Border(bottom: BorderSide(color: Colors.white10, width: 1)),
+                  child: Row(
+                    children: [
+                      Builder(
+                        builder: (btnContext) => TextButton.icon(
+                          onPressed: () async {
+                            final proj = await showDialog<ProjectModel>(
+                              context: btnContext,
+                              barrierDismissible: true,
+                              builder: (context) => ProjectManagerDialog(currentProject: _activeProject),
+                            );
+                              if (proj != null) {
+                                setState(() {
+                                  _activeProject = proj;
+                                  _projectName = proj.name;
+                                  _currentGridMode = GridMode.fromModeString(proj.gridModeId);
+                                  _customGridMetadata = proj.gridData;
+                                  
+                                  _windows.clear();
+                                  _minimizedWindows.clear();
+                                  for (var w in proj.windows) {
+                                    if (w.isMinimized) {
+                                      _minimizedWindows.add(w);
+                                    } else {
+                                      _windows.add(w);
+                                    }
+                                  }
+                                });
+                                _saveLastProjectId(proj.id);
+                              }
+                          },
+                          icon: const Icon(Icons.account_tree_outlined, color: Colors.blueAccent, size: 20),
+                        label: const Text('PROJECTS', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                        style: TextButton.styleFrom(
+                          backgroundColor: Colors.white.withValues(alpha: 0.1),
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                      ),
+                      ),
+                      const SizedBox(width: 24),
+                      Text(
+                        _projectName,
+                        style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white70, fontSize: 16),
+                      ),
+                      const SizedBox(width: 24),
+                      Expanded(
+                        child: Taskbar(
+                          key: _taskbarKey,
+                          minimizedWindows: _minimizedWindows,
+                          onReorder: _onReorderMinimized,
+                          onRestore: (w) {
+                            final size = MediaQuery.of(context).size;
+                            final workAreaSize = Size(size.width, size.height - 60);
+                            _restoreWindow(w, workAreaSize);
+                          },
+                          onClose: _removeWindow,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      ElevatedButton.icon(
+                        onPressed: _toggleSettingsPanel,
+                        icon: Icon(_isSettingsPanelVisible ? Icons.close : Icons.settings),
+                        label: const Text('Настройки'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _isSettingsPanelVisible ? Colors.redAccent.withValues(alpha: 0.2) : Colors.white10,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton.icon(
+                        onPressed: _toggleAddPanel,
+                        icon: Icon(_isAddPanelVisible ? Icons.close : Icons.add),
+                        label: const Text('Добавить окно'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _isAddPanelVisible ? Colors.redAccent.withValues(alpha: 0.2) : Colors.white10,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              // 3. Летящие анимации поверх всего экрана (включая верхнюю панель)
+              ..._flyingAnimations,
             ],
           ),
-          // Летящие анимации поверх всего экрана (включая верхнюю панель)
-          ..._flyingAnimations,
-        ],
+        ),
       ),
-    )));
+    );
   }
 
   Widget _buildTypeOption({
