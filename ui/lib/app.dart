@@ -24,8 +24,8 @@ class _AppState extends State<App> {
   final List<WindowData> _minimizedWindows = [];
   final List<Widget> _flyingAnimations = [];
   bool _isShiftPressed = false;
-  bool _isAddPanelVisible = false; // Состояние панели выбора окон
-  bool _isSettingsPanelVisible = false; // Состояние панели настроек
+  bool _isAddPanelVisible = false; 
+  bool _isSettingsPanelVisible = false; 
   GridMode _currentGridMode = GridMode.system;
   GridMetadata? _customGridMetadata;
   Offset? _previewPosition;
@@ -38,7 +38,7 @@ class _AppState extends State<App> {
     final box = _taskbarKey.currentContext?.findRenderObject() as RenderBox?;
     if (box != null) {
       final pos = box.localToGlobal(Offset.zero);
-      return Rect.fromLTWH(pos.dx + index * 150.0, pos.dy, 140, 48);
+      return Rect.fromLTWH(pos.dx, pos.dy, 140, 48); // В новой структуре координаты абсолютные
     }
     return Rect.fromLTWH(280.0 + index * 150.0, 6.0, 140, 48);
   }
@@ -101,28 +101,8 @@ class _AppState extends State<App> {
       id: DateTime.now().toString(),
       type: type,
       relativePosition: const Offset(0.1, 0.1),
-      relativeSize: type == 'viewport_cam' 
-          ? const Size(0.4, 0.5)
-          : type == 'settings_grid'
-              ? const Size(0.4, 0.5)
-              : type == 'file_browser'
-                  ? const Size(0.4, 0.5)
-                  : type == 'script'
-                      ? const Size(0.6, 0.7)
-                      : type == 'ai_chat'
-                          ? const Size(0.35, 0.6)
-                          : const Size(0.4, 0.4),
-      color: type == 'settings_grid' 
-          ? Colors.orangeAccent 
-          : type == 'file_browser'
-              ? Colors.greenAccent
-              : type == 'terminal'
-                  ? Colors.purpleAccent
-                  : type == 'script'
-                      ? Colors.tealAccent
-                      : type == 'ai_chat'
-                          ? Colors.amberAccent
-                          : Colors.blueAccent,
+      relativeSize: type == 'viewport_cam' ? const Size(0.4, 0.5) : const Size(0.4, 0.4),
+      color: type == 'script' ? Colors.tealAccent : Colors.blueAccent,
     );
 
     setState(() {
@@ -190,7 +170,6 @@ class _AppState extends State<App> {
       try {
         final w = _windows.firstWhere((w) => w.id == id);
         _windows.remove(w);
-
         final size = MediaQuery.of(context).size;
         final areaSize = Size(size.width, size.height - 60);
         final startRect = Rect.fromLTWH(
@@ -199,51 +178,17 @@ class _AppState extends State<App> {
           w.relativeSize.width * areaSize.width,
           w.relativeSize.height * areaSize.height,
         );
-
         final key = GlobalKey();
-        _flyingAnimations.add(
-          ExplodingWindow(
-            key: key,
-            data: w,
-            startRect: startRect,
-            onComplete: () {
-              setState(() {
-                _flyingAnimations.removeWhere((anim) => anim.key == key);
-              });
-              _saveWorkspace();
-            },
-          ) as Widget,
-        );
-      } catch (e) {
-        try {
-          final w = _minimizedWindows.firstWhere((w) => w.id == id);
-          final index = _minimizedWindows.indexOf(w);
-          w.isClosing = true;
-
-          final startRect = _getTaskbarItemRect(index);
-
-          final key = GlobalKey();
-          _flyingAnimations.add(
-            ExplodingWindow(
-              key: key,
-              data: w,
-              startRect: startRect,
-              onComplete: () {
-                setState(() {
-                  _flyingAnimations.removeWhere((anim) => anim.key == key);
-                  _minimizedWindows.remove(w);
-                });
-                _saveWorkspace();
-              },
-            ) as Widget,
-          );
-        } catch (_) {}
-      }
+        _flyingAnimations.add(ExplodingWindow(key: key, data: w, startRect: startRect, onComplete: () {
+          setState(() => _flyingAnimations.removeWhere((anim) => anim.key == key));
+          _saveWorkspace();
+        }) as Widget);
+      } catch (_) {}
     });
   }
 
   void _focusWindow(WindowData w) {
-    if (_windows.isNotEmpty && _windows.last.id != w.id && _windows.contains(w)) {
+    if (_windows.contains(w) && _windows.last.id != w.id) {
       setState(() {
         _windows.remove(w);
         _windows.add(w);
@@ -255,35 +200,24 @@ class _AppState extends State<App> {
     setState(() {
       _focusWindow(w);
       w.isFlying = true;
-
       final startRect = Rect.fromLTWH(
         w.relativePosition.dx * areaSize.width,
         w.relativePosition.dy * areaSize.height + 60.0,
         w.relativeSize.width * areaSize.width,
         w.relativeSize.height * areaSize.height,
       );
-      final endRect = _getTaskbarItemRect(_minimizedWindows.length);
-
+      final endRect = _getTaskbarItemRect(_minimizedWindows.indexOf(w)); // Taskbar rect
       final key = GlobalKey();
-      _flyingAnimations.add(
-        FlyingWindow(
-          key: key,
-          data: w,
-          startRect: startRect,
-          endRect: endRect,
-          isMinimizing: true,
-          onComplete: () {
-            setState(() {
-              _flyingAnimations.removeWhere((anim) => anim.key == key);
-              w.isFlying = false;
-              w.isMinimized = true;
-              _windows.remove(w);
-              _minimizedWindows.add(w);
-            });
-            _saveWorkspace();
-          },
-        ),
-      );
+      _flyingAnimations.add(FlyingWindow(key: key, data: w, startRect: startRect, endRect: endRect, isMinimizing: true, onComplete: () {
+        setState(() {
+          _flyingAnimations.removeWhere((anim) => anim.key == key);
+          w.isFlying = false;
+          w.isMinimized = true;
+          _windows.remove(w);
+          _minimizedWindows.add(w);
+        });
+        _saveWorkspace();
+      }));
     });
   }
 
@@ -294,7 +228,6 @@ class _AppState extends State<App> {
       _windows.add(w);
       w.isMinimized = false;
       w.isFlying = true;
-
       final startRect = _getTaskbarItemRect(index);
       final endRect = Rect.fromLTWH(
         w.relativePosition.dx * areaSize.width,
@@ -302,65 +235,40 @@ class _AppState extends State<App> {
         w.relativeSize.width * areaSize.width,
         w.relativeSize.height * areaSize.height,
       );
-
       final key = GlobalKey();
-      _flyingAnimations.add(
-        FlyingWindow(
-          key: key,
-          data: w,
-          startRect: startRect,
-          endRect: endRect,
-          isMinimizing: false,
-          onComplete: () {
-            setState(() {
-              _flyingAnimations.removeWhere((anim) => anim.key == key);
-              w.isFlying = false;
-            });
-            _saveWorkspace();
-          },
-        ),
-      );
+      _flyingAnimations.add(FlyingWindow(key: key, data: w, startRect: startRect, endRect: endRect, isMinimizing: false, onComplete: () {
+        setState(() {
+          _flyingAnimations.removeWhere((anim) => anim.key == key);
+          w.isFlying = false;
+        });
+        _saveWorkspace();
+      }));
     });
   }
 
   void _onReorderMinimized(int oldIndex, int newIndex) {
     setState(() {
-      if (oldIndex < newIndex) {
-        newIndex -= 1;
-      }
+      if (oldIndex < newIndex) newIndex -= 1;
       final WindowData item = _minimizedWindows.removeAt(oldIndex);
       _minimizedWindows.insert(newIndex, item);
     });
   }
 
-
   void _handlePanUpdate(WindowData data, DragUpdateDetails details, Size areaSize) {
     _focusWindow(data);
     setState(() {
-      final relativeDelta = Offset(
-        details.delta.dx / areaSize.width,
-        details.delta.dy / areaSize.height,
-      );
-      data.relativePosition += relativeDelta;
-      
-      if (_isShiftPressed) {
-        _calculateSnapPreview(details.globalPosition, areaSize);
-      } else {
-        _previewPosition = null;
-        _previewSize = null;
-      }
+      data.relativePosition += Offset(details.delta.dx / areaSize.width, details.delta.dy / areaSize.height);
+      if (_isShiftPressed) _calculateSnapPreview(details.globalPosition, areaSize);
+      else { _previewPosition = null; _previewSize = null; }
     });
   }
 
   void _handleResizeUpdate(WindowData data, Offset delta, Size areaSize) {
     _focusWindow(data);
     setState(() {
-      final relativeDeltaX = delta.dx / areaSize.width;
-      final relativeDeltaY = delta.dy / areaSize.height;
-
       data.relativeSize = Size(
-        math.max(0.25, data.relativeSize.width + relativeDeltaX),
-        math.max(0.25, data.relativeSize.height + relativeDeltaY),
+        math.max(0.25, data.relativeSize.width + delta.dx / areaSize.width),
+        math.max(0.25, data.relativeSize.height + delta.dy / areaSize.height),
       );
     });
   }
@@ -368,51 +276,23 @@ class _AppState extends State<App> {
   void _calculateSnapPreview(Offset cursorPosition, Size areaSize) {
     final RenderBox renderBox = context.findRenderObject() as RenderBox;
     final localCursor = renderBox.globalToLocal(cursorPosition);
-
     final metadata = GridMetadata.fromMode(_currentGridMode, customData: _customGridMetadata);
     final cells = metadata.computeCells();
-
-    final normalizedCursor = Offset(
-      localCursor.dx / areaSize.width,
-      localCursor.dy / areaSize.height,
-    );
-
-    const double gap = 3.0;
+    final normalizedCursor = Offset(localCursor.dx / areaSize.width, (localCursor.dy - 60) / areaSize.height);
     
     GridCell? targetCell;
-    for (var cell in cells) {
-      if (cell.rect.contains(normalizedCursor)) {
-        targetCell = cell;
-        break;
-      }
-    }
+    for (var cell in cells) { if (cell.rect.contains(normalizedCursor)) { targetCell = cell; break; } }
 
     if (targetCell != null) {
-      final double relativeGapX = gap / areaSize.width;
-      final double relativeGapY = gap / areaSize.height;
-
-      _previewPosition = Offset(
-        targetCell.rect.left + relativeGapX,
-        targetCell.rect.top + relativeGapY,
-      );
-      _previewSize = Size(
-        targetCell.rect.width - 2 * relativeGapX,
-        targetCell.rect.height - 2 * relativeGapY,
-      );
-    } else {
-      _previewPosition = null;
-      _previewSize = null;
-    }
+      _previewPosition = Offset(targetCell.rect.left + 3/areaSize.width, targetCell.rect.top + 3/areaSize.height);
+      _previewSize = Size(targetCell.rect.width - 6/areaSize.width, targetCell.rect.height - 6/areaSize.height);
+    } else { _previewPosition = null; _previewSize = null; }
   }
 
   void _handlePanEnd(WindowData data) {
     setState(() {
-      if (_isShiftPressed && _previewPosition != null && _previewSize != null) {
-        data.relativePosition = _previewPosition!;
-        data.relativeSize = _previewSize!;
-      }
-      _previewPosition = null;
-      _previewSize = null;
+      if (_isShiftPressed && _previewPosition != null) { data.relativePosition = _previewPosition!; data.relativeSize = _previewSize!; }
+      _previewPosition = null; _previewSize = null;
     });
     _saveWorkspace();
   }
@@ -420,45 +300,37 @@ class _AppState extends State<App> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'UI App',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        brightness: Brightness.dark,
-        scaffoldBackgroundColor: Colors.black,
-        useMaterial3: true,
-      ),
+      theme: ThemeData(brightness: Brightness.dark, scaffoldBackgroundColor: Colors.black, useMaterial3: true),
       home: Focus(
         autofocus: true,
         onKeyEvent: (node, event) {
           final isShift = HardwareKeyboard.instance.isShiftPressed;
           if (_isShiftPressed != isShift) {
-            setState(() {
-              _isShiftPressed = isShift;
-              if (!_isShiftPressed) {
-                _previewPosition = null;
-                _previewSize = null;
-              }
-            });
+            setState(() { _isShiftPressed = isShift; if (!_isShiftPressed) { _previewPosition = null; _previewSize = null; } });
           }
           return KeyEventResult.ignored;
         },
         child: Scaffold(
           body: Stack(
             children: [
-              // 1. Рабочая область на весь экран (первый слой)
+              // 1. Полный фон (Сетка всегда под всеми слоями)
+              Positioned.fill(child: GridBackground(mode: _currentGridMode, customMetadata: _customGridMetadata)),
+              
+              // 2. Слой контента с отступом для шапки
               Positioned.fill(
+                top: 0, // Начинаем с 0, чтобы LayoutBuilder видел весь экран
                 child: LayoutBuilder(
                   builder: (context, constraints) {
-                    final workAreaSize = Size(constraints.maxWidth, constraints.maxHeight);
+                    final workAreaSize = Size(constraints.maxWidth, constraints.maxHeight - 60);
                     
                     return Stack(
                       children: [
-                        // Сетка
-                        Container(
-                          color: Colors.grey[900],
+                        // Слой окон (смещен вниз на 60)
+                        Positioned.fill(
+                          top: 60,
                           child: Stack(
                             children: [
-                               GridBackground(mode: _currentGridMode, customMetadata: _customGridMetadata),
                               if (_previewPosition != null && _previewSize != null)
                                 Positioned(
                                   left: _previewPosition!.dx * workAreaSize.width,
@@ -472,39 +344,36 @@ class _AppState extends State<App> {
                                     ),
                                   ),
                                 ),
+                              ...[..._windows, ..._minimizedWindows].map((w) {
+                                return WindowItem(
+                                  key: w.key,
+                                  data: w,
+                                  isHidden: w.isMinimized || w.isFlying,
+                                  isShiftPressed: _isShiftPressed,
+                                  screenSize: workAreaSize,
+                                  themeColor: w.color,
+                                  onGridModeChanged: (mode, metadata) {
+                                    setState(() { _currentGridMode = mode; if (metadata != null) _customGridMetadata = metadata; });
+                                    _saveWorkspace();
+                                  },
+                                  onPanUpdate: (details) => _handlePanUpdate(w, details, workAreaSize),
+                                  onResizeUpdate: (delta) => _handleResizeUpdate(w, delta, workAreaSize),
+                                  onPanEnd: () => _handlePanEnd(w),
+                                  onMinimize: () => _minimizeWindow(w, workAreaSize),
+                                  onDelete: () => _removeWindow(w.id),
+                                  onFocus: () => _focusWindow(w),
+                                  initialDirectory: _activeProject?.directoryPath,
+                                );
+                              }),
                             ],
                           ),
                         ),
-                        // Окна (все)
-                        ...[..._windows, ..._minimizedWindows].map((w) {
-                          return WindowItem(
-                            key: w.key,
-                            data: w,
-                            isHidden: w.isMinimized || w.isFlying,
-                            isShiftPressed: _isShiftPressed,
-                            screenSize: workAreaSize,
-                            themeColor: w.color,
-                             onGridModeChanged: (mode, metadata) {
-                                  setState(() {
-                                    _currentGridMode = mode;
-                                    if (metadata != null) _customGridMetadata = metadata;
-                                  });
-                                  _saveWorkspace();
-                                },
-                              onPanUpdate: (details) => _handlePanUpdate(w, details, workAreaSize),
-                              onResizeUpdate: (delta) => _handleResizeUpdate(w, delta, workAreaSize),
-                              onPanEnd: () => _handlePanEnd(w),
-                              onMinimize: () => _minimizeWindow(w, workAreaSize),
-                              onDelete: () => _removeWindow(w.id),
-                              onFocus: () => _focusWindow(w),
-                              initialDirectory: _activeProject?.directoryPath,
-                            );
-                        }),
-                        // Анимированная панель выбора окон
+                        // Панели выезжают поверх окон, но МОГУТ быть под шапкой (top: 70 в старой логике)
+                        // Мы оставим их в основном Stack LayoutBuilder-а, чтобы координаты были абсолютными (от 0)
                         AnimatedPositioned(
                           duration: const Duration(milliseconds: 300),
                           curve: Curves.easeInOutCubic,
-                          top: _isAddPanelVisible ? 70 : -200, // Выезжает сверху
+                          top: _isAddPanelVisible ? 70 : -200,
                           left: 0,
                           right: 0,
                           child: Center(
@@ -515,50 +384,24 @@ class _AppState extends State<App> {
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  _buildTypeOption(
-                                    icon: Icons.videocam_outlined,
-                                    label: 'viewport_cam',
-                                    color: Colors.blueAccent,
-                                    onTap: (ctx) => _addWindow('viewport_cam', ctx),
-                                  ),
+                                  _buildTypeOption(icon: Icons.videocam_outlined, label: 'viewport_cam', color: Colors.blueAccent, onTap: (ctx) => _addWindow('viewport_cam', ctx)),
                                   const SizedBox(width: 12),
-                                  _buildTypeOption(
-                                    icon: Icons.folder_open_rounded,
-                                    label: 'file_browser',
-                                    color: Colors.greenAccent,
-                                    onTap: (ctx) => _addWindow('file_browser', ctx),
-                                  ),
+                                  _buildTypeOption(icon: Icons.folder_open_rounded, label: 'file_browser', color: Colors.greenAccent, onTap: (ctx) => _addWindow('file_browser', ctx)),
                                   const SizedBox(width: 12),
-                                  _buildTypeOption(
-                                    icon: Icons.terminal_rounded,
-                                    label: 'terminal',
-                                    color: Colors.purpleAccent,
-                                    onTap: (ctx) => _addWindow('terminal', ctx),
-                                  ),
+                                  _buildTypeOption(icon: Icons.terminal_rounded, label: 'terminal', color: Colors.purpleAccent, onTap: (ctx) => _addWindow('terminal', ctx)),
                                   const SizedBox(width: 12),
-                                  _buildTypeOption(
-                                    icon: Icons.account_tree_outlined,
-                                    label: 'script',
-                                    color: Colors.tealAccent,
-                                    onTap: (ctx) => _addWindow('script', ctx),
-                                  ),
+                                  _buildTypeOption(icon: Icons.account_tree_outlined, label: 'script', color: Colors.tealAccent, onTap: (ctx) => _addWindow('script', ctx)),
                                   const SizedBox(width: 12),
-                                  _buildTypeOption(
-                                    icon: Icons.auto_awesome,
-                                    label: 'ai_chat',
-                                    color: Colors.amberAccent,
-                                    onTap: (ctx) => _addWindow('ai_chat', ctx),
-                                  ),
+                                  _buildTypeOption(icon: Icons.auto_awesome, label: 'ai_chat', color: Colors.amberAccent, onTap: (ctx) => _addWindow('ai_chat', ctx)),
                                 ],
                               ),
                             ),
                           ),
                         ),
-                        // Анимированная панель настроек
                         AnimatedPositioned(
                           duration: const Duration(milliseconds: 300),
                           curve: Curves.easeInOutCubic,
-                          top: _isSettingsPanelVisible ? 70 : -200, // Выезжает сверху
+                          top: _isSettingsPanelVisible ? 70 : -200,
                           left: 0,
                           right: 0,
                           child: Center(
@@ -569,12 +412,7 @@ class _AppState extends State<App> {
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  _buildTypeOption(
-                                    icon: Icons.grid_4x4,
-                                    label: 'settings_grid',
-                                    color: Colors.orangeAccent,
-                                    onTap: (ctx) => _addWindow('settings_grid', ctx),
-                                  ),
+                                  _buildTypeOption(icon: Icons.grid_4x4, label: 'settings_grid', color: Colors.orangeAccent, onTap: (ctx) => _addWindow('settings_grid', ctx)),
                                 ],
                               ),
                             ),
@@ -585,7 +423,7 @@ class _AppState extends State<App> {
                   },
                 ),
               ),
-              // 2. Шапка приложения (самый верхний слой)
+              // 3. Шапка (самый верхний слой)
               Positioned(
                 top: 0,
                 left: 0,
@@ -602,45 +440,23 @@ class _AppState extends State<App> {
                       Builder(
                         builder: (btnContext) => TextButton.icon(
                           onPressed: () async {
-                            final proj = await showDialog<ProjectModel>(
-                              context: btnContext,
-                              barrierDismissible: true,
-                              builder: (context) => ProjectManagerDialog(currentProject: _activeProject),
-                            );
-                              if (proj != null) {
-                                setState(() {
-                                  _activeProject = proj;
-                                  _projectName = proj.name;
-                                  _currentGridMode = GridMode.fromModeString(proj.gridModeId);
-                                  _customGridMetadata = proj.gridData;
-                                  
-                                  _windows.clear();
-                                  _minimizedWindows.clear();
-                                  for (var w in proj.windows) {
-                                    if (w.isMinimized) {
-                                      _minimizedWindows.add(w);
-                                    } else {
-                                      _windows.add(w);
-                                    }
-                                  }
-                                });
-                                _saveLastProjectId(proj.id);
-                              }
+                            final proj = await showDialog<ProjectModel>(context: btnContext, barrierDismissible: true, builder: (context) => ProjectManagerDialog(currentProject: _activeProject));
+                            if (proj != null) {
+                              setState(() {
+                                _activeProject = proj; _projectName = proj.name; _currentGridMode = GridMode.fromModeString(proj.gridModeId); _customGridMetadata = proj.gridData;
+                                _windows.clear(); _minimizedWindows.clear();
+                                for (var w in proj.windows) { if (w.isMinimized) _minimizedWindows.add(w); else _windows.add(w); }
+                              });
+                              _saveLastProjectId(proj.id);
+                            }
                           },
                           icon: const Icon(Icons.account_tree_outlined, color: Colors.blueAccent, size: 20),
-                        label: const Text('PROJECTS', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                        style: TextButton.styleFrom(
-                          backgroundColor: Colors.white.withValues(alpha: 0.1),
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          label: const Text('PROJECTS', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                          style: TextButton.styleFrom(backgroundColor: Colors.white.withValues(alpha: 0.1), padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
                         ),
                       ),
-                      ),
                       const SizedBox(width: 24),
-                      Text(
-                        _projectName,
-                        style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white70, fontSize: 16),
-                      ),
+                      Text(_projectName, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white70, fontSize: 16)),
                       const SizedBox(width: 24),
                       Expanded(
                         child: Taskbar(
@@ -656,32 +472,13 @@ class _AppState extends State<App> {
                         ),
                       ),
                       const SizedBox(width: 16),
-                      ElevatedButton.icon(
-                        onPressed: _toggleSettingsPanel,
-                        icon: Icon(_isSettingsPanelVisible ? Icons.close : Icons.settings),
-                        label: const Text('Настройки'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: _isSettingsPanelVisible ? Colors.redAccent.withValues(alpha: 0.2) : Colors.white10,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                        ),
-                      ),
+                      ElevatedButton.icon(onPressed: _toggleSettingsPanel, icon: Icon(_isSettingsPanelVisible ? Icons.close : Icons.settings), label: const Text('Настройки'), style: ElevatedButton.styleFrom(backgroundColor: _isSettingsPanelVisible ? Colors.redAccent.withValues(alpha: 0.2) : Colors.white10, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10))),
                       const SizedBox(width: 8),
-                      ElevatedButton.icon(
-                        onPressed: _toggleAddPanel,
-                        icon: Icon(_isAddPanelVisible ? Icons.close : Icons.add),
-                        label: const Text('Добавить окно'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: _isAddPanelVisible ? Colors.redAccent.withValues(alpha: 0.2) : Colors.white10,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                        ),
-                      ),
+                      ElevatedButton.icon(onPressed: _toggleAddPanel, icon: Icon(_isAddPanelVisible ? Icons.close : Icons.add), label: const Text('Добавить окно'), style: ElevatedButton.styleFrom(backgroundColor: _isAddPanelVisible ? Colors.redAccent.withValues(alpha: 0.2) : Colors.white10, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10))),
                     ],
                   ),
                 ),
               ),
-              // 3. Летящие анимации поверх всего экрана (включая верхнюю панель)
               ..._flyingAnimations,
             ],
           ),
@@ -690,28 +487,7 @@ class _AppState extends State<App> {
     );
   }
 
-  Widget _buildTypeOption({
-    required IconData icon,
-    required String label,
-    required Color color,
-    required void Function(BuildContext) onTap,
-  }) {
-    return Builder(
-      builder: (context) => InkWell(
-        onTap: () => onTap(context),
-        borderRadius: BorderRadius.circular(8),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 32, color: color),
-              const SizedBox(height: 8),
-              Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-            ],
-          ),
-        ),
-      ),
-    );
+  Widget _buildTypeOption({required IconData icon, required String label, required Color color, required void Function(BuildContext) onTap}) {
+    return Builder(builder: (context) => InkWell(onTap: () => onTap(context), borderRadius: BorderRadius.circular(8), child: Container(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12), child: Column(mainAxisSize: MainAxisSize.min, children: [Icon(icon, size: 32, color: color), const SizedBox(height: 8), Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold))]))));
   }
 }
