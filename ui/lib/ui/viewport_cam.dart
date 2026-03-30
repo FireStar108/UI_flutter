@@ -45,25 +45,32 @@ class _ViewportCamState extends State<ViewportCam> {
   void _startAnalysisLoop() async {
     while (_selectedCamera != null && mounted) {
       final vision = VisionService();
-      // Анализируем только если симуляция запущена И блоки соединены
-      if (_controller != null && vision.isAnalysisEnabled) {
+      final config = vision.configNotifier.value;
+      
+      // Анализируем только если конфиг активен И камера совпадает
+      if (_controller != null && config != null && config.isActive && config.cameraId == _selectedCamera?.deviceId) {
         try {
           final imageData = await _controller!.takePicture();
           if (imageData != null && imageData.bytes != null) {
-            final detections = await vision.processFrame(imageData.bytes!);
-            if (mounted) {
-              vision.detectionsNotifier.value = detections;
-            }
+            await vision.processVision(imageData.bytes!);
           }
         } catch (e) {
           debugPrint('VIEWPORT: Error in analysis loop: $e');
         }
-      } else if (!vision.isAnalysisEnabled && vision.detectionsNotifier.value.isNotEmpty) {
-        // Если связь пропала или симуляция стоп — очищаем
-        vision.detectionsNotifier.value = [];
+      } else {
+        // Если условия не соблюдены — очищаем
+        if (vision.detectionsNotifier.value.isNotEmpty) {
+          vision.detectionsNotifier.value = [];
+        }
+        if (vision.posesNotifier.value.isNotEmpty) {
+          vision.posesNotifier.value = [];
+        }
       }
-      // Интервал анализа
-      await Future.delayed(const Duration(milliseconds: 300));
+      
+      // FPS из конфигурации (минимум 33мс для 30fps)
+      final fps = config?.fps ?? 5.0;
+      final interval = (1000 / fps).round().clamp(33, 2000);
+      await Future.delayed(Duration(milliseconds: interval));
     }
   }
 
@@ -107,11 +114,17 @@ class _ViewportCamState extends State<ViewportCam> {
                           ValueListenableBuilder<List<FaceDetection>>(
                             valueListenable: VisionService().detectionsNotifier,
                             builder: (context, detections, _) {
-                              if (detections.isNotEmpty) {
-                                debugPrint('VIEWPORT: Received ${detections.length} detections');
-                              }
                               return Stack(
                                 children: detections.map((d) => _buildDetectionBox(d, constraints.biggest)).toList(),
+                              );
+                            },
+                          ),
+                          // Оверлей детекции тела (Pose)
+                          ValueListenableBuilder<List<PoseDetection>>(
+                            valueListenable: VisionService().posesNotifier,
+                            builder: (context, poses, _) {
+                              return Stack(
+                                children: poses.map((p) => _buildPoseOverlay(p, constraints.biggest)).toList(),
                               );
                             },
                           ),
@@ -226,6 +239,17 @@ class _ViewportCamState extends State<ViewportCam> {
       ),
     );
   }
+
+  Widget _buildPoseOverlay(PoseDetection pose, Size viewportSize) {
+    return Positioned.fill(
+      child: CustomPaint(
+        painter: PosePainter(
+          pose: pose,
+          viewportSize: viewportSize,
+        ),
+      ),
+    );
+  }
 }
 
 class FacePainter extends CustomPainter {
@@ -236,66 +260,110 @@ class FacePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (detection.oval.isEmpty) return;
-
-    final paint = Paint()
-      ..color = const Color(0xFF03A9F4)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.0
-      ..strokeCap = StrokeCap.round;
-
-    final path = Path();
-    
-    // Мапим первую точку
-    final firstPoint = Offset(
-      detection.oval[0].dx * viewportSize.width,
-      detection.oval[0].dy * viewportSize.height,
+    // Рисуем квадратную рамку (как просил пользователь)
+    final rect = Rect.fromLTWH(
+      detection.boundingBox.left * viewportSize.width,
+      detection.boundingBox.top * viewportSize.height,
+      detection.boundingBox.width * viewportSize.width,
+      detection.boundingBox.height * viewportSize.height,
     );
-    path.moveTo(firstPoint.dx, firstPoint.dy);
 
-    // Рисуем остальные точки овала
-    for (int i = 1; i < detection.oval.length; i++) {
-      path.lineTo(
-        detection.oval[i].dx * viewportSize.width,
-        detection.oval[i].dy * viewportSize.height,
-      );
-    }
-    path.close();
+    final color = VisionService().faceColorNotifier.value;
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.0;
 
-    // Свечение
-    canvas.drawPath(path, Paint()
-      ..color = const Color(0xFF03A9F4).withValues(alpha: 0.3)
+    // Рамка с небольшим свечением
+    canvas.drawRect(rect, paint);
+    canvas.drawRect(rect, Paint()
+      ..color = color.withValues(alpha: 0.3)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 4.0
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4));
 
-    canvas.drawPath(path, paint);
-
     // Текст с именем
-    if (detection.name != null) {
-      final textPainter = TextPainter(
-        text: TextSpan(
-          text: '${detection.name} ${(detection.confidence * 100).round()}%',
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
-            backgroundColor: Color(0xFF03A9F4),
-          ),
+    final name = detection.name ?? "Unknown";
+    final textPainter = TextPainter(
+      text: TextSpan(
+        text: ' $name ${(detection.confidence * 100).round()}% ',
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+          backgroundColor: color,
         ),
-        textDirection: TextDirection.ltr,
-      );
-      textPainter.layout();
-      
-      // Позиционируем над верхней точкой овала (индекс 10 в MP Mesh это верх лба)
-      final topPoint = Offset(
-        detection.oval[0].dx * viewportSize.width,
-        detection.oval[0].dy * viewportSize.height - 20,
-      );
-      textPainter.paint(canvas, topPoint);
-    }
+      ),
+      textDirection: TextDirection.ltr,
+    );
+    textPainter.layout();
+    
+    textPainter.paint(canvas, Offset(rect.left, rect.top - 20));
   }
 
   @override
   bool shouldRepaint(FacePainter oldDelegate) => true;
+}
+
+class PosePainter extends CustomPainter {
+  final PoseDetection pose;
+  final Size viewportSize;
+
+  PosePainter({required this.pose, required this.viewportSize});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final vision = VisionService();
+    final color = vision.poseColorNotifier.value;
+    final showConnections = vision.showPoseConnectionsNotifier.value;
+
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 3.0
+      ..style = PaintingStyle.stroke;
+
+    final pointPaint = Paint()
+      ..color = Colors.white
+      ..strokeWidth = 4.0
+      ..style = PaintingStyle.fill;
+
+    // Список соединений (индексы MediaPipe Pose)
+    final connections = [
+      [11, 12], [11, 23], [12, 24], [23, 24], // Torso
+      [11, 13], [13, 15], [12, 14], [14, 16], // Arms
+      [23, 25], [25, 27], [24, 26], [26, 28], // Legs
+      [27, 29], [29, 31], [27, 31],           // Left foot
+      [28, 30], [30, 32], [28, 32],           // Right foot
+    ];
+
+    // Рисуем линии
+    if (showConnections) {
+      for (final connection in connections) {
+        final p1 = pose.points[connection[0]];
+        final p2 = pose.points[connection[1]];
+
+        if (p1.visibility > 0.5 && p2.visibility > 0.5) {
+          canvas.drawLine(
+            Offset(p1.x * viewportSize.width, p1.y * viewportSize.height),
+            Offset(p2.x * viewportSize.width, p2.y * viewportSize.height),
+            paint,
+          );
+        }
+      }
+    }
+
+    // Рисуем точки (суставы)
+    for (final p in pose.points) {
+      if (p.visibility > 0.5) {
+        canvas.drawCircle(
+          Offset(p.x * viewportSize.width, p.y * viewportSize.height),
+          3.0,
+          pointPaint,
+        );
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant PosePainter oldDelegate) => true;
 }

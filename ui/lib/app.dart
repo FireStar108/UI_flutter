@@ -6,9 +6,11 @@ import 'ui/taskbar.dart';
 import 'ui/project_manager_dialog.dart';
 import 'ui/flying_window.dart';
 import 'ui/exploding_window.dart';
+import 'ui/glass_container.dart';
 import 'core/grid_models.dart';
 import 'dart:math' as math;
 import 'core/project_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class App extends StatefulWidget {
   const App({super.key});
@@ -49,11 +51,15 @@ class _AppState extends State<App> {
 
   Future<void> _initWorkspace() async {
     final projs = await ProjectService().loadProjects();
+    final prefs = await SharedPreferences.getInstance();
+    final lastId = prefs.getString('last_project_id');
+    
     ProjectModel? active;
     if (projs.isEmpty) {
       active = await ProjectService().createProject('UI Workspace');
     } else {
-      active = projs.first;
+      // Ищем проект по последнему ID, иначе берем первый
+      active = projs.firstWhere((p) => p.id == lastId, orElse: () => projs.first);
     }
     
     if (mounted) {
@@ -73,7 +79,14 @@ class _AppState extends State<App> {
           }
         }
       });
+      // Сохраняем как последний активный
+      _saveLastProjectId(active!.id);
     }
+  }
+
+  Future<void> _saveLastProjectId(String id) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('last_project_id', id);
   }
 
   void _saveWorkspace() {
@@ -99,7 +112,9 @@ class _AppState extends State<App> {
                   ? const Size(0.4, 0.5)
                   : type == 'script'
                       ? const Size(0.6, 0.7)
-                      : const Size(0.4, 0.4),
+                      : type == 'ai_chat'
+                          ? const Size(0.35, 0.6)
+                          : const Size(0.4, 0.4),
       color: type == 'settings_grid' 
           ? Colors.orangeAccent 
           : type == 'file_browser'
@@ -108,7 +123,9 @@ class _AppState extends State<App> {
                   ? Colors.purpleAccent
                   : type == 'script'
                       ? Colors.tealAccent
-                      : Colors.blueAccent,
+                      : type == 'ai_chat'
+                          ? Colors.amberAccent
+                          : Colors.blueAccent,
     );
 
     setState(() {
@@ -444,14 +461,14 @@ class _AppState extends State<App> {
               Column(
                 children: [
                   // Верхняя плашка
-                  Container(
-                height: 60,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                decoration: BoxDecoration(
-                  color: Colors.grey[850],
-                  border: Border(bottom: BorderSide(color: Colors.white10, width: 1)),
-                ),
-                child: Row(
+                  GlassContainer(
+                    height: 60,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    opacity: 0.5,
+                    blur: 15, // Больше размытия для шапки
+                    color: Colors.grey[850]!,
+                    border: const Border(bottom: BorderSide(color: Colors.white10, width: 1)),
+                    child: Row(
                   children: [
                     Builder(
                       builder: (btnContext) => TextButton.icon(
@@ -461,24 +478,25 @@ class _AppState extends State<App> {
                             barrierDismissible: true,
                             builder: (context) => ProjectManagerDialog(currentProject: _activeProject),
                           );
-                          if (proj != null) {
-                            setState(() {
-                              _activeProject = proj;
-                              _projectName = proj.name;
-                              _currentGridMode = GridMode.fromModeString(proj.gridModeId);
-                              _customGridMetadata = proj.gridData;
-                              
-                              _windows.clear();
-                              _minimizedWindows.clear();
-                              for (var w in proj.windows) {
-                                if (w.isMinimized) {
-                                  _minimizedWindows.add(w);
-                                } else {
-                                  _windows.add(w);
+                            if (proj != null) {
+                              setState(() {
+                                _activeProject = proj;
+                                _projectName = proj.name;
+                                _currentGridMode = GridMode.fromModeString(proj.gridModeId);
+                                _customGridMetadata = proj.gridData;
+                                
+                                _windows.clear();
+                                _minimizedWindows.clear();
+                                for (var w in proj.windows) {
+                                  if (w.isMinimized) {
+                                    _minimizedWindows.add(w);
+                                  } else {
+                                    _windows.add(w);
+                                  }
                                 }
-                              }
-                            });
-                          }
+                              });
+                              _saveLastProjectId(proj.id);
+                            }
                         },
                         icon: const Icon(Icons.account_tree_outlined, color: Colors.blueAccent, size: 20),
                       label: const Text('PROJECTS', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
@@ -599,20 +617,13 @@ class _AppState extends State<App> {
                           left: 0,
                           right: 0,
                           child: Center(
-                            child: Container(
+                            child: GlassContainer(
                               padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                color: Colors.grey[850],
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: Colors.white10),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black54,
-                                    blurRadius: 20,
-                                    offset: Offset(0, 10),
-                                  ),
-                                ],
-                              ),
+                              opacity: 0.6,
+                              blur: 20,
+                              color: Colors.grey[850]!,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.white10),
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
@@ -643,6 +654,13 @@ class _AppState extends State<App> {
                                     color: Colors.tealAccent,
                                     onTap: (ctx) => _addWindow('script', ctx),
                                   ),
+                                  const SizedBox(width: 12),
+                                  _buildTypeOption(
+                                    icon: Icons.auto_awesome,
+                                    label: 'ai_chat',
+                                    color: Colors.amberAccent,
+                                    onTap: (ctx) => _addWindow('ai_chat', ctx),
+                                  ),
                                 ],
                               ),
                             ),
@@ -656,20 +674,13 @@ class _AppState extends State<App> {
                           left: 0,
                           right: 0,
                           child: Center(
-                            child: Container(
+                            child: GlassContainer(
                               padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                color: Colors.grey[850],
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: Colors.white10),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black54,
-                                    blurRadius: 20,
-                                    offset: Offset(0, 10),
-                                  ),
-                                ],
-                              ),
+                              opacity: 0.6,
+                              blur: 20,
+                              color: Colors.grey[850]!,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.white10),
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [

@@ -4,6 +4,8 @@ import 'terminal_window.dart';
 import 'settings_grid.dart';
 import 'file_browser.dart';
 import 'script_window.dart';
+import 'ai_chat_window.dart';
+import 'glass_container.dart';
 import '../core/grid_models.dart';
 
 class WindowData {
@@ -101,35 +103,28 @@ class WindowItem extends StatelessWidget {
           behavior: HitTestBehavior.deferToChild,
           child: Stack(
             children: [
-          Container(
+          GlassContainer(
             width: width,
             height: height,
-            decoration: BoxDecoration(
-              color: Colors.grey[900]?.withValues(alpha: 0.98),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: themeColor.withValues(alpha: 0.7), width: 1.5),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.3),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
+            opacity: 0.8,
+            blur: 10,
+            color: Colors.grey[900]!,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: themeColor.withValues(alpha: 0.7), width: 1.5),
             child: Column(
               children: [
                 // Панель заголовка для перемещения
                 GestureDetector(
                   onPanUpdate: onPanUpdate,
                   onPanEnd: (_) => onPanEnd(),
-                  child: Container(
-                    height: 24,
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    decoration: BoxDecoration(
+                    child: GlassContainer(
+                      height: 24,
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      opacity: 0.7,
+                      blur: 5,
                       color: Colors.black87,
                       borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
-                    ),
-                    child: Row(
+                      child: Row(
                       children: [
                         const SizedBox(width: 8),
                         const Icon(Icons.drag_handle, size: 16, color: Colors.white54),
@@ -176,7 +171,9 @@ class WindowItem extends StatelessWidget {
                                   ? TerminalWindow(accentColor: themeColor, initialDirectory: initialDirectory)
                                   : data.type == 'script'
                                       ? ScriptWindow(accentColor: themeColor, projectDirectory: initialDirectory)
-                                      : const Center(
+                                      : data.type == 'ai_chat'
+                                          ? AiChatWindow(accentColor: themeColor)
+                                          : const Center(
                               child: Icon(Icons.window, color: Colors.white30, size: 40),
                             ),
                 ),

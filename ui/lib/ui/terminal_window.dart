@@ -5,14 +5,16 @@ import 'package:flutter/material.dart';
 import 'package:xterm/xterm.dart';
 import 'package:flutter_pty/flutter_pty.dart';
 import 'package:file_picker/file_picker.dart';
+import '../backend/vision_service.dart';
 
 class TerminalSession {
   final String id;
   String name;
   final Terminal terminal;
   Pty? pty;
+  final bool isSystem;
 
-  TerminalSession({required this.id, required this.name, required this.terminal});
+  TerminalSession({required this.id, required this.name, required this.terminal, this.pty, this.isSystem = false});
 }
 
 class TerminalWindow extends StatefulWidget {
@@ -39,7 +41,25 @@ class _TerminalWindowState extends State<TerminalWindow> {
     super.initState();
     _terminalController = TerminalController();
     _workingDirectory = widget.initialDirectory ?? Platform.environment['HOME'] ?? Directory.current.path;
+    _createSystemSession();
     _createNewSession();
+  }
+
+  void _createSystemSession() {
+    final id = 'system_logs';
+    final terminal = Terminal(maxLines: 10000);
+    final session = TerminalSession(id: id, name: 'SYSTEM', terminal: terminal, isSystem: true);
+    
+    VisionService().logStream.listen((text) {
+      terminal.write(text);
+    });
+
+    terminal.write('--- SYSTEM LOGS STARTED ---\r\n');
+    
+    setState(() {
+      _sessions.add(session);
+      if (_activeSessionId == null) _activeSessionId = id;
+    });
   }
 
   @override
@@ -63,6 +83,7 @@ class _TerminalWindowState extends State<TerminalWindow> {
     _startPty(session);
 
     terminal.onOutput = (String data) {
+      if (session.isSystem) return;
       session.pty?.write(Uint8List.fromList(utf8.encode(data)));
     };
 
@@ -248,7 +269,11 @@ class _TerminalWindowState extends State<TerminalWindow> {
                             ),
                             child: Row(
                               children: [
-                                Icon(Icons.terminal_rounded, size: 16, color: isActive ? widget.accentColor : Colors.white54),
+                                Icon(
+                                  session.isSystem ? Icons.analytics_outlined : Icons.terminal_rounded, 
+                                  size: 16, 
+                                  color: isActive ? widget.accentColor : Colors.white54
+                                ),
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: Text(
@@ -272,10 +297,11 @@ class _TerminalWindowState extends State<TerminalWindow> {
                                         child: const Icon(Icons.clear_all_rounded, color: Colors.white54, size: 16),
                                       ),
                                       const SizedBox(width: 8),
-                                      GestureDetector(
-                                        onTap: () => _deleteSession(session.id),
-                                        child: const Icon(Icons.close_rounded, color: Colors.white54, size: 16),
-                                      ),
+                                      if (!session.isSystem)
+                                        GestureDetector(
+                                          onTap: () => _deleteSession(session.id),
+                                          child: const Icon(Icons.close_rounded, color: Colors.white54, size: 16),
+                                        ),
                                     ],
                                   ),
                               ],

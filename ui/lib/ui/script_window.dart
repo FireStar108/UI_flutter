@@ -6,6 +6,8 @@ import 'package:flutter/gestures.dart';
 import 'package:path/path.dart' as p;
 import '../backend/camera_service.dart';
 import '../backend/vision_service.dart';
+import '../backend/ollama_service.dart';
+import 'glass_container.dart';
 import 'package:file_picker/file_picker.dart';
 
 // ============================================================
@@ -125,6 +127,9 @@ const List<BlockDefinition> kBlockCatalog = [
   BlockDefinition(id: 'cam', name: 'Cam', category: 'Hardware', color: Color(0xFF8BC34A), icon: Icons.videocam, inputs: 0, outputs: 1),
   // Vision
   BlockDefinition(id: 'face_vision', name: 'Face Vision', category: 'Vision', color: Color(0xFF03A9F4), icon: Icons.face, inputs: 1, outputs: 1),
+  BlockDefinition(id: 'pose_vision', name: 'Pose Vision', category: 'Vision', color: Color(0xFF4CAF50), icon: Icons.accessibility_new, inputs: 1, outputs: 1),
+  // AI
+  BlockDefinition(id: 'brain', name: 'Brain', category: 'AI', color: Color(0xFFE040FB), icon: Icons.psychology, inputs: 1, outputs: 1),
 ];
 
 // ============================================================
@@ -178,14 +183,44 @@ class _ScriptWindowState extends State<ScriptWindow> {
   List<CameraInfo> _availableCameras = [];
   bool _camerasLoaded = false;
 
+  // Базы лиц
+  List<String> _availableFaceDbs = [];
+  bool _faceDbsLoaded = false;
+
+  // AI Модели
+  List<String> _availableAiModels = [];
+  bool _aiModelsLoaded = false;
+
   // Script Runtime
-  bool _isRunning = false;
+  final Set<String> _runningScripts = {};
 
   @override
   void initState() {
     super.initState();
     _loadScripts();
     _loadCameras();
+    _loadFaceDbs();
+    _loadAiModels();
+  }
+
+  Future<void> _loadAiModels() async {
+    final models = await OllamaService().listModels();
+    if (mounted) {
+      setState(() {
+        _availableAiModels = models;
+        _aiModelsLoaded = true;
+      });
+    }
+  }
+
+  Future<void> _loadFaceDbs() async {
+    final dbs = await FaceDbService.listDatabases();
+    if (mounted) {
+      setState(() {
+        _availableFaceDbs = dbs;
+        _faceDbsLoaded = true;
+      });
+    }
   }
 
   @override
@@ -501,7 +536,21 @@ class _ScriptWindowState extends State<ScriptWindow> {
                 Expanded(
                   child: _activeScript == null
                       ? _buildEmptyCanvas()
-                      : _buildCanvas(),
+                      : Stack(
+                          children: [
+                            IgnorePointer(
+                              ignoring: _runningScripts.contains(_activeScript),
+                              child: _buildCanvas(),
+                            ),
+                            // Оверлей блокировки только на холсте (просто затемнение)
+                            if (_runningScripts.contains(_activeScript))
+                              Positioned.fill(
+                                child: Container(
+                                  color: Colors.black.withValues(alpha: 0.5),
+                                ),
+                              ),
+                          ],
+                        ),
                 ),
                 if (_activeScript != null && (_isShopOpen || _selectedNodeId != null))
                   GestureDetector(
@@ -525,14 +574,17 @@ class _ScriptWindowState extends State<ScriptWindow> {
     );
   }
 
+
   Widget _buildToolbar() {
-    return Container(
+    final isCurrentRunning = _activeScript != null && _runningScripts.contains(_activeScript);
+    
+    return GlassContainer(
       height: 48,
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: const BoxDecoration(
-        color: Color(0xff141414),
-        border: Border(bottom: BorderSide(color: Colors.white10)),
-      ),
+      opacity: 0.7,
+      blur: 10,
+      color: const Color(0xff141414),
+      border: const Border(bottom: BorderSide(color: Colors.white10)),
       child: Row(
         children: [
           Text(_activeScript ?? '', style: const TextStyle(color: Colors.white38, fontSize: 12)),
@@ -541,17 +593,37 @@ class _ScriptWindowState extends State<ScriptWindow> {
             label: 'ПУСК',
             icon: Icons.play_arrow,
             color: const Color(0xFF4CAF50),
-            isActive: !_isRunning,
-            onPressed: _startScript,
+            isActive: !isCurrentRunning,
+            onPressed: () => _startScript(),
           ),
           const SizedBox(width: 8),
           _buildActionButton(
             label: 'СТОП',
             icon: Icons.stop,
             color: const Color(0xFFF44336),
-            isActive: _isRunning,
-            onPressed: _stopScript,
+            isActive: isCurrentRunning,
+            onPressed: () => _stopScript(),
           ),
+          if (_scripts.length > 1) ...[
+            const SizedBox(width: 16),
+            Container(width: 1, height: 20, color: Colors.white12),
+            const SizedBox(width: 16),
+            _buildActionButton(
+              label: 'RUN ALL',
+              icon: Icons.playlist_play,
+              color: Colors.blueAccent,
+              isActive: _runningScripts.length < _scripts.length,
+              onPressed: _runAll,
+            ),
+            const SizedBox(width: 8),
+            _buildActionButton(
+              label: 'BREAK ALL',
+              icon: Icons.bolt,
+              color: Colors.orangeAccent,
+              isActive: _runningScripts.isNotEmpty,
+              onPressed: _breakAll,
+            ),
+          ],
           const SizedBox(width: 16),
           _buildActionButton(
             label: 'SHOP',
@@ -587,83 +659,133 @@ class _ScriptWindowState extends State<ScriptWindow> {
     );
   }
 
-  void _startScript() async {
-    setState(() {
-      _isRunning = true;
-    });
-    
-    // Пытаемся найти корень проекта (над папкой ui или по пути скриптов)
-    String root = Directory.current.path;
-    if (root.endsWith('ui')) {
-      root = p.dirname(root);
-    } else if (widget.projectDirectory != null) {
-      // Идем вверх пока не найдем backend или пока не кончатся папки
-      String current = widget.projectDirectory!;
-      while (current.length > 5) {
-        if (Directory(p.join(current, 'backend')).existsSync()) {
-          root = current;
-          break;
+  ScriptConfig _extractConfig(List<ScriptNode> nodes, List<NodeConnection> connections) {
+    bool faceEnabled = false;
+    bool poseEnabled = false;
+    String? activeCamId;
+    double activeFps = 5.0;
+
+    final camNodes = nodes.where((n) => n.definition.id == 'cam').toList();
+    for (final cam in camNodes) {
+      final connectedIds = connections
+          .where((c) => c.fromNodeId == cam.id)
+          .map((c) => c.toNodeId)
+          .toList();
+
+      for (final connId in connectedIds) {
+        final node = nodes.where((n) => n.id == connId).firstOrNull;
+        if (node == null) continue;
+
+        if (node.definition.id == 'face_vision') {
+          faceEnabled = true;
+          activeCamId ??= cam.properties['cameraId'];
+          activeFps = (node.properties['fps'] ?? 5.0).toDouble();
         }
-        current = p.dirname(current);
+
+        if (node.definition.id == 'pose_vision') {
+          poseEnabled = true;
+          activeCamId ??= cam.properties['cameraId'];
+          activeFps = (node.properties['fps'] ?? activeFps).toDouble();
+        }
       }
     }
+
+    return ScriptConfig(
+      faceEnabled: faceEnabled,
+      poseEnabled: poseEnabled,
+      cameraId: activeCamId,
+      fps: activeFps,
+    );
+  }
+
+  void _startScript([String? name]) async {
+    final target = name ?? _activeScript;
+    if (target == null) return;
+
+    setState(() {
+      _runningScripts.add(target);
+    });
 
     final vision = VisionService();
+    String root = Directory.current.path;
+    if (root.endsWith('ui')) root = p.dirname(root);
+
+    ScriptConfig config;
+    if (target == _activeScript) {
+      config = _extractConfig(_nodes, _connections);
+      
+      // Применяем визуальные настройки сразу для активного скрипта
+      for (final node in _nodes) {
+        final int? colorVal = node.properties['color'];
+        if (node.definition.id == 'face_vision' && colorVal != null) {
+          vision.faceColorNotifier.value = Color(colorVal);
+        } else if (node.definition.id == 'pose_vision') {
+          if (colorVal != null) vision.poseColorNotifier.value = Color(colorVal);
+          final bool? showConn = node.properties['showConnections'];
+          if (showConn != null) vision.showPoseConnectionsNotifier.value = showConn;
+        }
+      }
+    } else {
+      // Загружаем из файла для фонового скрипта
+      try {
+        final file = File(p.join(_scriptsDir, '$target.json'));
+        final data = jsonDecode(await file.readAsString());
+        final nodes = (data['nodes'] as List).map((n) => ScriptNode.fromMap(n, kBlockCatalog)).toList();
+        final conns = (data['connections'] as List).map((c) => NodeConnection.fromJson(c)).toList();
+        config = _extractConfig(nodes, conns);
+      } catch (e) {
+        vision.addLog('Error loading $target: $e');
+        setState(() => _runningScripts.remove(target));
+        return;
+      }
+    }
+
+    vision.updateConfig(target, config);
     await vision.startBackend(root);
+    vision.addLog('System: Скрипт "$target" запущен');
 
-    // 1. Собираем данные для обучения из всех блоков Face Vision в текущем скрипте
-    final faceNodes = _nodes.where((n) => n.definition.id == 'face_vision').toList();
-    final List<Map<String, dynamic>> persons = [];
-    for (final node in faceNodes) {
-      if (node.properties['faces'] != null && (node.properties['faces'] as List).isNotEmpty) {
-        persons.add({
-          'name': '${node.definition.name} ${node.id.substring(0, 4)}',
-          'faces': node.properties['faces'],
-        });
+    // Обучение лиц (если это активный скрипт, данные уже в памяти)
+    if (config.faceEnabled && target == _activeScript) {
+      final faceNodes = _nodes.where((n) => n.definition.id == 'face_vision').toList();
+      final List<Map<String, dynamic>> persons = [];
+      for (final node in faceNodes) {
+        final List nodeFaces = node.properties['faces'] ?? [];
+        for (final face in nodeFaces) {
+          final nameStr = face['name'] ?? 'Unknown';
+          final existing = persons.where((p) => p['name'] == nameStr).firstOrNull;
+          if (existing != null) {
+            (existing['faces'] as List).add(face);
+          } else {
+            persons.add({'name': nameStr, 'faces': [face]});
+          }
+        }
       }
+      if (persons.isNotEmpty) await vision.train(persons);
     }
-
-    if (persons.isNotEmpty) {
-      debugPrint('SCRIPT: Training vision with ${persons.length} persons');
-      await vision.train(persons);
-    }
-
-    // 2. Проверяем наличие связи Cam -> Face Vision
-    bool hasVisionLink = false;
-    final camNodes = _nodes.where((n) => n.definition.id == 'cam').toList();
-    for (final cam in camNodes) {
-      final connectedTo = _connections.where((c) => c.fromNodeId == cam.id).map((c) => c.toNodeId).toList();
-      if (_nodes.any((n) => connectedTo.contains(n.id) && n.definition.id == 'face_vision')) {
-        hasVisionLink = true;
-        break;
-      }
-    }
-    
-    vision.isAnalysisEnabled = hasVisionLink;
-
-    debugPrint('SCRIPT: Simulation started. hasVisionLink: $hasVisionLink');
-    _runSimulation();
   }
 
-  void _stopScript() {
+  void _stopScript([String? name]) {
+    final target = name ?? _activeScript;
+    if (target == null) return;
+
     setState(() {
-      _isRunning = false;
+      _runningScripts.remove(target);
     });
-    VisionService().stopBackend();
+    VisionService().updateConfig(target, null);
+    VisionService().addLog('System: Скрипт "$target" остановлен');
   }
 
-  void _runSimulation() async {
-    debugPrint('SCRIPT: Simulation started. _isRunning: $_isRunning');
-    while (_isRunning) {
-      await Future.delayed(const Duration(milliseconds: 500));
-      if (!_isRunning) break;
-      if (mounted) {
-        final detections = VisionService().generateMockDetections();
-        debugPrint('SCRIPT: Updating detections (count: ${detections.length})');
-        VisionService().detectionsNotifier.value = detections;
-      }
+  void _runAll() {
+    for (final name in _scripts) {
+      if (!_runningScripts.contains(name)) _startScript(name);
     }
-    debugPrint('SCRIPT: Simulation stopped.');
+  }
+
+  void _breakAll() {
+    VisionService().stopAll();
+    setState(() {
+      _runningScripts.clear();
+    });
   }
 
   Widget _buildRightPanel() {
@@ -673,9 +795,12 @@ class _ScriptWindowState extends State<ScriptWindow> {
 
   Widget _buildSettingsPanel() {
     final node = _nodes.firstWhere((n) => n.id == _selectedNodeId, orElse: () => _nodes.first);
-    return Container(
+    return GlassContainer(
       width: _rightPanelWidth,
-      decoration: const BoxDecoration(color: Color(0xff141414), border: Border(left: BorderSide(color: Colors.white10))),
+      opacity: 0.6,
+      blur: 20,
+      color: const Color(0xff141414),
+      border: const Border(left: BorderSide(color: Colors.white10)),
       child: Column(
         children: [
           Container(
@@ -726,6 +851,10 @@ class _ScriptWindowState extends State<ScriptWindow> {
         return _buildCamSettings(node);
       case 'face_vision':
         return _buildFaceVisionSettings(node);
+      case 'pose_vision':
+        return _buildPoseVisionSettings(node);
+      case 'brain':
+        return _buildBrainSettings(node);
       default:
         return [
           const Center(child: Text('Нет дополнительных настроек', style: TextStyle(color: Colors.white24, fontSize: 12))),
@@ -735,13 +864,63 @@ class _ScriptWindowState extends State<ScriptWindow> {
 
   /// Настройки блока Face Vision
   List<Widget> _buildFaceVisionSettings(ScriptNode node) {
-    if (node.properties['faces'] == null) {
-      node.properties['faces'] = [];
-    }
-    final List faces = node.properties['faces'];
+    if (node.properties['faces'] == null) node.properties['faces'] = [];
+    final String selectedDb = node.properties['dbName'] ?? 'local';
     final double fps = (node.properties['fps'] ?? 5.0).toDouble();
+    final int colorValue = node.properties['color'] ?? const Color(0xFF03A9F4).value;
 
     return [
+      const Text('Цвет рамки', style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.bold)),
+      const SizedBox(height: 8),
+      _buildColorPicker(
+        selectedColor: Color(colorValue),
+        onColorSelected: (color) {
+          setState(() => node.properties['color'] = color.value);
+          VisionService().faceColorNotifier.value = color;
+          _saveCurrentScript();
+        },
+      ),
+      const SizedBox(height: 16),
+      const Text('Источник лиц', style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.bold)),
+      const SizedBox(height: 8),
+      Row(
+        children: [
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(4), border: Border.all(color: Colors.white10)),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: _availableFaceDbs.contains(selectedDb) ? selectedDb : 'local',
+                  isExpanded: true,
+                  dropdownColor: const Color(0xff1e1e1e),
+                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                  onChanged: (val) async {
+                    if (val == null) return;
+                    setState(() => node.properties['dbName'] = val);
+                    if (val != 'local') {
+                      final faces = await FaceDbService.loadDatabase(val);
+                      setState(() => node.properties['faces'] = faces);
+                    }
+                    _saveCurrentScript();
+                  },
+                  items: [
+                    const DropdownMenuItem(value: 'local', child: Text('Локальный (в блоке)')),
+                    ..._availableFaceDbs.map((db) => DropdownMenuItem(value: db, child: Text(db))),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          IconButton(
+            icon: const Icon(Icons.add_business_outlined, size: 18, color: Color(0xFF03A9F4)),
+            tooltip: 'Создать новую БД',
+            onPressed: () => _showCreateDbDialog(),
+          ),
+        ],
+      ),
+      const SizedBox(height: 16),
       const Text('Частота анализа (FPS)', style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.bold)),
       Slider(
         value: fps,
@@ -758,7 +937,7 @@ class _ScriptWindowState extends State<ScriptWindow> {
       const SizedBox(height: 16),
       Row(
         children: [
-          const Expanded(child: Text('База лиц блока', style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.bold))),
+          const Expanded(child: Text('Список лиц', style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.bold))),
           IconButton(
             icon: const Icon(Icons.add_a_photo, size: 18, color: Color(0xFF03A9F4)),
             padding: EdgeInsets.zero,
@@ -767,33 +946,33 @@ class _ScriptWindowState extends State<ScriptWindow> {
           ),
         ],
       ),
-      const Text('Добавьте фото для узнавания человека', style: TextStyle(color: Colors.white24, fontSize: 10)),
+      const Text('Добавьте фото для узнавания', style: TextStyle(color: Colors.white24, fontSize: 10)),
       const SizedBox(height: 8),
       Container(
         height: 200,
-        decoration: BoxDecoration(
-          color: Colors.black26,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Colors.white10),
-        ),
-        child: faces.isEmpty
-            ? const Center(child: Text('Нет эталонных лиц', style: TextStyle(color: Colors.white24, fontSize: 11)))
+        decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.white10)),
+        child: (node.properties['faces'] as List).isEmpty
+            ? const Center(child: Text('Нет лиц', style: TextStyle(color: Colors.white24, fontSize: 11)))
             : ListView.builder(
                 padding: const EdgeInsets.symmetric(vertical: 4),
-                itemCount: faces.length,
+                itemCount: (node.properties['faces'] as List).length,
                 itemBuilder: (context, i) {
+                  final List faces = node.properties['faces'];
                   final face = Map<String, dynamic>.from(faces[i]);
                   final path = face['path'] as String?;
                   return ListTile(
                     dense: true,
                     leading: path != null && File(path).existsSync()
-                      ? ClipRRect(borderRadius: BorderRadius.circular(4), child: Image.file(File(path), width: 32, height: 32, fit: BoxFit.cover))
-                      : const Icon(Icons.face, size: 16, color: Colors.white38),
+                        ? ClipRRect(borderRadius: BorderRadius.circular(4), child: Image.file(File(path), width: 32, height: 32, fit: BoxFit.cover))
+                        : const Icon(Icons.face, size: 16, color: Colors.white38),
                     title: Text(face['name'] ?? 'Без имени', style: const TextStyle(color: Colors.white70, fontSize: 12)),
                     trailing: IconButton(
                       icon: const Icon(Icons.delete_outline, size: 14, color: Colors.redAccent),
-                      onPressed: () {
+                      onPressed: () async {
                         setState(() => faces.removeAt(i));
+                        if (selectedDb != 'local') {
+                          await FaceDbService.saveDatabase(selectedDb, faces);
+                        }
                         _saveCurrentScript();
                       },
                     ),
@@ -802,6 +981,252 @@ class _ScriptWindowState extends State<ScriptWindow> {
               ),
       ),
     ];
+  }
+
+  /// Настройки блока Pose Vision
+  List<Widget> _buildPoseVisionSettings(ScriptNode node) {
+    final double fps = (node.properties['fps'] ?? 5.0).toDouble();
+    final int colorValue = node.properties['color'] ?? const Color(0xFF4CAF50).value;
+    final bool showConnections = node.properties['showConnections'] ?? true;
+
+    return [
+      const Text('Цвет скелета', style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.bold)),
+      const SizedBox(height: 8),
+      _buildColorPicker(
+        selectedColor: Color(colorValue),
+        onColorSelected: (color) {
+          setState(() => node.properties['color'] = color.value);
+          VisionService().poseColorNotifier.value = color;
+          _saveCurrentScript();
+        },
+      ),
+      const SizedBox(height: 16),
+      const Text('Частота анализа (FPS)', style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.bold)),
+      Slider(
+        value: fps,
+        min: 1,
+        max: 30,
+        divisions: 29,
+        label: fps.round().toString(),
+        activeColor: const Color(0xFF4CAF50),
+        onChanged: (val) {
+          setState(() => node.properties['fps'] = val);
+          _saveCurrentScript();
+        },
+      ),
+      const SizedBox(height: 16),
+      Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          const Text('Показывать соединения', style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.bold)),
+          Switch(
+            value: showConnections,
+            activeColor: const Color(0xFF4CAF50),
+            onChanged: (val) {
+              setState(() => node.properties['showConnections'] = val);
+              VisionService().showPoseConnectionsNotifier.value = val;
+              _saveCurrentScript();
+            },
+          ),
+        ],
+      ),
+    ];
+  }
+
+  /// Настройки блока Brain (AI)
+  List<Widget> _buildBrainSettings(ScriptNode node) {
+    node.properties['provider'] ??= 'ollama';
+    node.properties['model'] ??= _availableAiModels.isNotEmpty ? _availableAiModels.first : 'llama3';
+    node.properties['url'] ??= 'http://localhost:11434';
+    node.properties['apiKey'] ??= '';
+
+    final String provider = node.properties['provider'];
+    final String selectedModel = node.properties['model'];
+
+    return [
+      const Text('Режим работы', style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.bold)),
+      const SizedBox(height: 8),
+      // Селектор провайдера (Horizontal List of Chips)
+      SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: ['ollama', 'api', 'server'].map((p) {
+            final isSelected = provider == p;
+            return Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: InkWell(
+                onTap: () {
+                  setState(() => node.properties['provider'] = p);
+                  _saveCurrentScript();
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: isSelected ? widget.accentColor.withValues(alpha: 0.2) : Colors.black26,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: isSelected ? widget.accentColor : Colors.white10),
+                  ),
+                  child: Text(
+                    p.toUpperCase(),
+                    style: TextStyle(
+                      color: isSelected ? Colors.white : Colors.white38,
+                      fontSize: 11,
+                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      ),
+      const SizedBox(height: 16),
+      const Divider(color: Colors.white10),
+      const SizedBox(height: 16),
+
+      // Контент в зависимости от провайдера
+      if (provider == 'ollama') ...[
+        const Text('Модель (Ollama)', style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(4), border: Border.all(color: Colors.white10)),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: _availableAiModels.contains(selectedModel) ? selectedModel : null,
+              isExpanded: true,
+              hint: const Text('Выберите модель', style: TextStyle(color: Colors.white24, fontSize: 12)),
+              dropdownColor: const Color(0xff1e1e1e),
+              style: const TextStyle(color: Colors.white, fontSize: 12),
+              onChanged: (val) {
+                if (val == null) return;
+                setState(() => node.properties['model'] = val);
+                _saveCurrentScript();
+              },
+              items: _availableAiModels.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
+            ),
+          ),
+        ),
+      ],
+
+      if (provider == 'api') ...[
+        const Text('API Ключ', style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 8),
+        _buildTextField(
+          initialValue: node.properties['apiKey'],
+          hint: 'sk-...',
+          obscureText: true,
+          onChanged: (val) {
+            node.properties['apiKey'] = val;
+            _saveCurrentScript();
+          },
+        ),
+      ],
+
+      if (provider == 'server') ...[
+        const Text('URL Сервера', style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 8),
+        _buildTextField(
+          initialValue: node.properties['url'],
+          hint: 'http://...',
+          onChanged: (val) {
+            node.properties['url'] = val;
+            _saveCurrentScript();
+          },
+        ),
+      ],
+    ];
+  }
+
+  /// Вспомогательный метод для текстовых полей в настройках
+  Widget _buildTextField({
+    required String initialValue,
+    required String hint,
+    required Function(String) onChanged,
+    bool obscureText = false,
+  }) {
+    return TextField(
+      controller: TextEditingController(text: initialValue)..selection = TextSelection.collapsed(offset: initialValue.length),
+      obscureText: obscureText,
+      style: const TextStyle(color: Colors.white, fontSize: 12),
+      decoration: InputDecoration(
+        filled: true,
+        fillColor: Colors.black26,
+        hintText: hint,
+        hintStyle: const TextStyle(color: Colors.white24),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(4), borderSide: const BorderSide(color: Colors.white10)),
+        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(4), borderSide: const BorderSide(color: Colors.white10)),
+        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(4), borderSide: BorderSide(color: widget.accentColor.withValues(alpha: 0.5))),
+      ),
+      onChanged: onChanged,
+    );
+  }
+
+  /// Вспомогательный виджет выбора цвета
+  Widget _buildColorPicker({required Color selectedColor, required Function(Color) onColorSelected}) {
+    final List<Color> colors = [
+      const Color(0xFF03A9F4), // Blue
+      const Color(0xFF4CAF50), // Green
+      const Color(0xFFFF9800), // Orange
+      const Color(0xFFF44336), // Red
+      const Color(0xFF9C27B0), // Purple
+      const Color(0xFFFFEB3B), // Yellow
+      const Color(0xFFFFFFFF), // White
+    ];
+
+    return Wrap(
+      spacing: 8,
+      children: colors.map((color) {
+        final bool isSelected = color.value == selectedColor.value;
+        return InkWell(
+          onTap: () => onColorSelected(color),
+          child: Container(
+            width: 24,
+            height: 24,
+            decoration: BoxDecoration(
+              color: color,
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: isSelected ? Colors.white : Colors.transparent,
+                width: 2,
+              ),
+              boxShadow: isSelected ? [BoxShadow(color: color.withValues(alpha: 0.5), blurRadius: 4, spreadRadius: 1)] : null,
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  void _showCreateDbDialog() {
+    final nameController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xff1e1e1e),
+        title: const Text('Новая база данных лиц', style: TextStyle(color: Colors.white, fontSize: 16)),
+        content: TextField(
+          controller: nameController,
+          style: const TextStyle(color: Colors.white),
+          autofocus: true,
+          decoration: const InputDecoration(hintText: 'Название базы', hintStyle: TextStyle(color: Colors.white24)),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Отмена')),
+          TextButton(
+            onPressed: () async {
+              if (nameController.text.isNotEmpty) {
+                await FaceDbService.createEmpty(nameController.text);
+                await _loadFaceDbs();
+                Navigator.pop(context);
+              }
+            },
+            child: const Text('Создать'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showAddFaceDialogV2(ScriptNode node) async {
@@ -837,15 +1262,22 @@ class _ScriptWindowState extends State<ScriptWindow> {
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Отмена')),
           TextButton(
-            onPressed: () {
-              if (nameController.text.isNotEmpty) {
+            onPressed: () async {
+              final name = nameController.text.trim();
+              if (name.isNotEmpty) {
+                final faces = node.properties['faces'] as List;
                 setState(() {
-                  final faces = node.properties['faces'] as List;
                   faces.add({
-                    'name': nameController.text,
+                    'name': name,
                     'path': path,
                   });
                 });
+                
+                final String selectedDb = node.properties['dbName'] ?? 'local';
+                if (selectedDb != 'local') {
+                  await FaceDbService.saveDatabase(selectedDb, faces);
+                }
+                
                 _saveCurrentScript();
                 Navigator.pop(context);
               }
@@ -969,12 +1401,12 @@ class _ScriptWindowState extends State<ScriptWindow> {
   }
 
   Widget _buildLeftPanel() {
-    return Container(
+    return GlassContainer(
       width: _leftPanelWidth,
-      decoration: const BoxDecoration(
-        color: Color(0xff141414),
-        border: Border(right: BorderSide(color: Colors.white10)),
-      ),
+      opacity: 0.6,
+      blur: 20,
+      color: const Color(0xff141414),
+      border: const Border(right: BorderSide(color: Colors.white10)),
       child: Column(
         children: [
           Container(
@@ -1021,6 +1453,8 @@ class _ScriptWindowState extends State<ScriptWindow> {
               itemBuilder: (_, i) {
                 final name = _scripts[i];
                 final isActive = name == _activeScript;
+                final isRunning = _runningScripts.contains(name);
+                
                 return InkWell(
                   onTap: () => _openScript(name),
                   child: Container(
@@ -1031,9 +1465,17 @@ class _ScriptWindowState extends State<ScriptWindow> {
                     ),
                     child: Row(
                       children: [
-                        Icon(Icons.description, color: isActive ? widget.accentColor : Colors.white38, size: 14),
+                        Icon(
+                          isRunning ? Icons.play_circle_fill : Icons.description, 
+                          color: isRunning ? Colors.greenAccent : (isActive ? widget.accentColor : Colors.white38), 
+                          size: 14
+                        ),
                         const SizedBox(width: 8),
                         Expanded(child: Text(name, style: TextStyle(color: isActive ? Colors.white : Colors.white54, fontSize: 12, fontWeight: isActive ? FontWeight.bold : FontWeight.normal), overflow: TextOverflow.ellipsis)),
+                        if (isRunning) ...[
+                          const Icon(Icons.bolt, color: Colors.orangeAccent, size: 10),
+                          const SizedBox(width: 8),
+                        ],
                         if (isActive) 
                           IconButton(
                             icon: const Icon(Icons.delete_outline, size: 16, color: Colors.redAccent),
@@ -1307,9 +1749,12 @@ class _ScriptWindowState extends State<ScriptWindow> {
     final filtered = _searchQuery.isEmpty ? kBlockCatalog : kBlockCatalog.where((b) => b.name.toLowerCase().contains(_searchQuery.toLowerCase()) || b.category.toLowerCase().contains(_searchQuery.toLowerCase())).toList();
     final Map<String, List<BlockDefinition>> grouped = {};
     for (final b in filtered) { grouped.putIfAbsent(b.category, () => []).add(b); }
-    return Container(
+    return GlassContainer(
       width: _rightPanelWidth,
-      decoration: const BoxDecoration(color: Color(0xff141414), border: Border(left: BorderSide(color: Colors.white10))),
+      opacity: 0.6,
+      blur: 20,
+      color: const Color(0xff141414),
+      border: const Border(left: BorderSide(color: Colors.white10)),
       child: Column(
         children: [
           Container(
